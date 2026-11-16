@@ -38,7 +38,9 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
 
   const s = getWebDavSettings();
   const selectedScan = appState.selectedLocId
-    ? appState.scans.find((sc) => sc.meta.locId === appState.selectedLocId)
+    ? appState.scans.find(
+        (sc) => sc.meta.locId === appState.selectedLocId || sc.locId === appState.selectedLocId,
+      )
     : undefined;
 
   dialog.innerHTML = `
@@ -145,7 +147,8 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
   };
 
   listSchemaSelect.addEventListener("change", () => {
-    patchState({ listViewSchemaId: listSchemaSelect.value });
+    const id = listSchemaSelect.value.trim();
+    patchState({ listViewSchemaId: id === getDefaultSchemaId() ? null : id });
     handlers.onRerender();
     status.textContent = "Tabellen-Schema übernommen.";
   });

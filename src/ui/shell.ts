@@ -28,6 +28,7 @@ import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } fro
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 import { resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
 import { visibleTableColumns } from "../lib/table-layout";
+import { buildMetaByLocId, metaForLocId } from "../lib/dataset-scan-match";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -279,14 +280,24 @@ function renderTableTagsCell(td: HTMLElement, tags: string[], maxVisible = 4): v
 }
 
 function tableListSchema(): DatasetSchemaDefinition {
-  const id = appState.listViewSchemaId ?? getDefaultSchemaId();
-  return getSchemaById(id) ?? getDefaultSchema();
+  const preferred = appState.listViewSchemaId;
+  if (preferred) {
+    const custom = getSchemaById(preferred);
+    if (custom) {
+      const visible = visibleTableColumns(custom);
+      const hasBezeichnung = visible.some(
+        (c) => c.source === "meta" && c.fieldKey === "bezeichnung",
+      );
+      if (hasBezeichnung && visible.length >= 2) return custom;
+    }
+  }
+  return getDefaultSchema();
 }
 
 function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const listSchema = tableListSchema();
   const columns = visibleTableColumns(listSchema);
-  const metaById = new Map(appState.scans.map((s) => [s.meta.locId, s.meta]));
+  const metaById = buildMetaByLocId(appState.scans);
   const sort = appState.tableSort;
 
   const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter(), appState.scans);
@@ -404,7 +415,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     });
     tdSel.append(rowCheck);
     tr.append(tdSel);
-    const meta = metaById.get(row.locId);
+    const meta = metaForLocId(row.locId, appState.scans, metaById);
     for (const col of columns) {
       const td = el("td");
       if (col.fieldKey === "tags" && col.source === "meta") {
@@ -885,7 +896,15 @@ function renderDatasetFilesSection(
 function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   const scan = getSelectedScan();
   if (!scan) {
-    patchState({ view: "table" });
+    const miss = el("div", "detail-missing");
+    const p = el("p", "muted");
+    p.textContent = "Datensatz nicht gefunden oder nicht geladen.";
+    const back = el("button", "btn");
+    back.type = "button";
+    back.textContent = "← Zurück zur Tabelle";
+    back.addEventListener("click", () => patchState({ view: "table", selectedLocId: null }));
+    miss.append(p, back);
+    main.append(miss);
     return;
   }
 

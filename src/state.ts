@@ -1,6 +1,7 @@
 import type { IndexRecord, GlobalSyncMeta } from "./lib/db-index";
 import type { TagFilterRule } from "./lib/dataset-tags";
 import type { DatasetScan } from "./lib/fs-local";
+import { findScanByLocId } from "./lib/dataset-scan-match";
 import type { SyncLogLine, SyncProgress } from "./lib/webdav-sync";
 
 export type AppView = "table" | "detail";
@@ -77,6 +78,5 @@ export function patchState(partial: Partial<AppState>): void {
 }
 
 export function getSelectedScan(): DatasetScan | null {
-  if (!appState.selectedLocId) return null;
-  return appState.scans.find((s) => s.meta.locId === appState.selectedLocId) ?? null;
+  return findScanByLocId(appState.scans, appState.selectedLocId);
 }
