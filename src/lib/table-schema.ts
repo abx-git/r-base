@@ -27,24 +27,34 @@ export function formatTableCell(
     if (!tags?.length) return "—";
     return tags.join(", ");
   }
-  if (!meta) {
-    if (col.source === "meta") {
-      switch (col.fieldKey) {
-        case "bezeichnung":
-          return record.bezeichnung?.trim() || "—";
-        case "kategorie":
-          return record.kategorie?.trim() || "—";
-        case "locId":
-          return displayLocId(record.locId);
-        default:
-          return "—";
+  const indexFallbackForMeta = (): string | null => {
+    if (col.source !== "meta" && col.source !== undefined) return null;
+    switch (col.fieldKey) {
+      case "bezeichnung": {
+        const t = record.bezeichnung?.trim() || meta?.bezeichnung?.trim();
+        return t || null;
       }
+      case "kategorie": {
+        const t = record.kategorie?.trim() || meta?.kategorie?.trim();
+        return t || null;
+      }
+      case "locId":
+        return displayLocId(meta?.locId?.trim() || record.locId);
+      default:
+        return null;
     }
+  };
+  if (!meta) {
+    const fb = indexFallbackForMeta();
+    if (fb) return fb;
     return "—";
   }
   const v = getMetaFieldValue(meta, col.fieldKey);
-  if (col.fieldKey === "locId") return displayLocId(String(v ?? meta.locId));
-  if (v === null || v === undefined || v === "") return "—";
+  if (col.fieldKey === "locId") return displayLocId(String(v ?? meta.locId ?? record.locId));
+  if (v === null || v === undefined || v === "") {
+    const fb = indexFallbackForMeta();
+    return fb ?? "—";
+  }
   if (Array.isArray(v)) return v.map(String).join(", ");
   if (typeof v === "boolean") return v ? "Ja" : "Nein";
   return String(v);

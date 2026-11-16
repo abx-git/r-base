@@ -1,4 +1,5 @@
 import type { DatasetSchemaDefinition, TableColumnDef } from "./dataset-schema-types";
+import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
 
 export const INDEX_TABLE_FIELDS: { fieldKey: string; label: string; source: "index" }[] = [
   { fieldKey: "fileCount", label: "Dateien", source: "index" },
@@ -19,18 +20,69 @@ export type ConfiguredTableColumnRow = {
 };
 
 export function tableColumnId(col: TableColumnDef): string {
-  const source = col.source ?? "meta";
+  const source = col.source ?? inferColumnSource(col.fieldKey);
   return `${source}:${col.fieldKey}`;
 }
 
+const INDEX_FIELD_KEYS = new Set(INDEX_TABLE_FIELDS.map((f) => f.fieldKey));
+
+export function inferColumnSource(fieldKey: string): "meta" | "index" {
+  return INDEX_FIELD_KEYS.has(fieldKey) ? "index" : "meta";
+}
+
+/** Normalisiert gespeicherte IDs (früher nur fieldKey oder falsches source:-Präfix). */
+export function resolveHiddenTableColumnIds(
+  schema: DatasetSchemaDefinition,
+  rawKeys?: string[],
+): Set<string> {
+  const cols = schema.tableColumns.length ? schema.tableColumns : DEFAULT_RUD_SCHEMA.tableColumns;
+  const hidden = new Set<string>();
+  for (const raw of rawKeys ?? []) {
+    const t = raw.trim();
+    if (!t) continue;
+    if (t.includes(":")) {
+      hidden.add(t);
+      continue;
+    }
+    const matches = cols.filter((c) => c.fieldKey === t);
+    if (matches.length) {
+      for (const c of matches) hidden.add(tableColumnId(c));
+    } else {
+      hidden.add(`${inferColumnSource(t)}:${t}`);
+    }
+  }
+  return hidden;
+}
+
+export function isTableColumnHidden(col: TableColumnDef, hidden: Set<string>): boolean {
+  const id = tableColumnId(col);
+  if (hidden.has(id)) return true;
+  if (hidden.has(col.fieldKey)) return true;
+  const otherSource = col.source === "index" ? "meta" : "index";
+  if (hidden.has(`${otherSource}:${col.fieldKey}`)) return true;
+  return false;
+}
+
 export function getHiddenTableColumnIdSet(schema: DatasetSchemaDefinition): Set<string> {
-  return new Set(schema.hiddenTableColumnKeys ?? []);
+  return resolveHiddenTableColumnIds(schema, schema.hiddenTableColumnKeys);
 }
 
 export function visibleTableColumns(schema: DatasetSchemaDefinition): TableColumnDef[] {
   const hidden = getHiddenTableColumnIdSet(schema);
-  const cols = schema.tableColumns.length ? schema.tableColumns : [];
-  return cols.filter((c) => !hidden.has(tableColumnId(c)));
+  const cols = schema.tableColumns.length ? schema.tableColumns : [...DEFAULT_RUD_SCHEMA.tableColumns];
+  let visible = cols.filter((c) => !isTableColumnHidden(c, hidden));
+  if (visible.length < 2) {
+    const fallback = DEFAULT_RUD_SCHEMA.tableColumns.filter(
+      (c) => !isTableColumnHidden(c, hidden),
+    );
+    if (fallback.length >= 2) visible = fallback;
+    else {
+      visible = DEFAULT_RUD_SCHEMA.tableColumns.filter((c) =>
+        ["locId", "bezeichnung", "kategorie", "tags"].includes(c.fieldKey),
+      );
+    }
+  }
+  return visible;
 }
 
 export function applyTableColumnHidden(

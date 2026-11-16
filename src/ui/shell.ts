@@ -28,7 +28,7 @@ import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } fro
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 import { resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
 import { visibleTableColumns } from "../lib/table-layout";
-import { buildMetaByLocId, metaForLocId } from "../lib/dataset-scan-match";
+import { buildMetaByLocId, findScanByLocId, metaForLocId } from "../lib/dataset-scan-match";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -281,14 +281,18 @@ function renderTableTagsCell(td: HTMLElement, tags: string[], maxVisible = 4): v
 
 function tableListSchema(): DatasetSchemaDefinition {
   const preferred = appState.listViewSchemaId;
-  if (preferred) {
-    const custom = getSchemaById(preferred);
-    if (custom) return custom;
-  }
+  const base = preferred ? getSchemaById(preferred) ?? getDefaultSchema() : getDefaultSchema();
+  if (visibleTableColumns(base).length >= 2) return base;
   return getDefaultSchema();
 }
 
 function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
+  if (appState.records.length > 0 && appState.scans.length === 0) {
+    const warn = el("div", "banner banner-error");
+    warn.textContent =
+      "Es gibt Einträge im lokalen Index, aber keine geladenen Datensatz-Ordner — bitte den Stammordner erneut verbinden.";
+    main.append(warn);
+  }
   const listSchema = tableListSchema();
   const columns = visibleTableColumns(listSchema);
   const metaById = buildMetaByLocId(appState.scans);
@@ -392,7 +396,8 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     const isSelected = selection.has(row.locId);
     const tr = el("tr", isSelected ? "data-row data-row--selected" : "data-row");
     tr.addEventListener("click", () => {
-      patchState({ selectedLocId: row.locId, view: "detail" });
+      const scan = findScanByLocId(appState.scans, row.locId);
+      patchState({ selectedLocId: scan?.meta.locId ?? row.locId, view: "detail" });
       handlers.onRerender();
     });
     const tdSel = el("td", "table-cell-select");
