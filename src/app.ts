@@ -97,6 +97,27 @@ async function connectFolder(): Promise<void> {
   patchState({ message: "Stammordner verbunden." });
 }
 
+async function handleSetFieldHidden(
+  fieldKey: string,
+  hidden: boolean,
+  schemaOverride?: DatasetSchemaDefinition,
+): Promise<void> {
+  const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+  if (!scan) return;
+  const schema = schemaOverride ?? resolveSchemaForDataset(scan.meta);
+  setSchemaFieldHidden(scan.meta, schema, fieldKey, hidden);
+  try {
+    await writeMetaToFolder(scan.handle, scan.meta);
+    await reloadFromDisk();
+    patchState({
+      message: hidden ? `Feld „${fieldKey}“ ausgeblendet.` : `Feld „${fieldKey}“ eingeblendet.`,
+      error: "",
+    });
+  } catch (e) {
+    patchState({ error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 export function startApp(container: HTMLElement): void {
   if (window.location.protocol === "file:") {
     patchState({
@@ -202,10 +223,12 @@ export function startApp(container: HTMLElement): void {
       input.click();
     },
     onOpenSettings: () => {
-      openSettingsModal(
-        () => patchState({}),
-        () => patchState({ message: "Schema-Konfiguration aktualisiert." }),
-      );
+      openSettingsModal({
+        onClose: () => patchState({}),
+        onSchemaChanged: () => patchState({ message: "Schema-Konfiguration aktualisiert." }),
+        onSetFieldHidden: handleSetFieldHidden,
+        onRerender: () => patchState({}),
+      });
     },
     onNewDataset: async () => {
       if (!appState.rootHandle) return;
@@ -342,22 +365,7 @@ export function startApp(container: HTMLElement): void {
         error: errors.length ? errors.slice(0, 6).join(" · ") : "",
       });
     },
-    onSetFieldHidden: async (fieldKey, hidden, schemaOverride?: DatasetSchemaDefinition) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
-      if (!scan) return;
-      const schema = schemaOverride ?? resolveSchemaForDataset(scan.meta);
-      setSchemaFieldHidden(scan.meta, schema, fieldKey, hidden);
-      try {
-        await writeMetaToFolder(scan.handle, scan.meta);
-        await reloadFromDisk();
-        patchState({
-          message: hidden ? `Feld „${fieldKey}“ ausgeblendet.` : `Feld „${fieldKey}“ eingeblendet.`,
-          error: "",
-        });
-      } catch (e) {
-        patchState({ error: e instanceof Error ? e.message : String(e) });
-      }
-    },
+    onSetFieldHidden: handleSetFieldHidden,
     onBulkAssignTag: async (locIds, rawTag) => {
       if (!appState.rootHandle || !locIds.length) return;
       const tags = normalizeDatasetTags([rawTag]);

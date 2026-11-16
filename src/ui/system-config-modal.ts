@@ -90,7 +90,7 @@ export function openSystemConfigModal(onChanged: () => void): void {
 
   dialog.innerHTML = `
     <h2>Systemkonfiguration</h2>
-    <p class="muted">Schemata enthalten Felder, Detail-Layout, Tabellenspalten und Sichtbarkeit (Register „Sichtbarkeit“). Mehrere Schemata parallel – Importe wählen ein Ziel-Schema. Gespeichert in <code>r-base.project.json</code>.</p>
+    <p class="muted">Schemata enthalten Felder, Listenansicht, Detailformular und Sichtbarkeit. Auch unter Einstellungen erreichbar. Gespeichert in <code>r-base.project.json</code>.</p>
     <div class="schema-list" data-list></div>
     <div class="modal-actions">
       <button type="button" class="btn" data-action="new">Neues Schema…</button>

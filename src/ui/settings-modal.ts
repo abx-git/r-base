@@ -7,29 +7,73 @@ import {
 import { getLoxIdPrefix } from "../lib/id-config";
 import { propfind } from "../lib/webdav-client";
 import { openSystemConfigModal } from "./system-config-modal";
-import { loadSystemSchemaConfig } from "../lib/dataset-schema-store";
+import {
+  getDefaultSchemaId,
+  loadSystemSchemaConfig,
+  resolveSchemaForDataset,
+} from "../lib/dataset-schema-store";
 import { persistCurrentProjectConfig } from "../lib/project-config";
+import { openSchemaEditorModal } from "./schema-editor-modal";
+import { appState, patchState } from "../state";
+import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 
-export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => void): void {
+export type SettingsHandlers = {
+  onClose: () => void;
+  onSchemaChanged: () => void;
+  onSetFieldHidden: (
+    fieldKey: string,
+    hidden: boolean,
+    schema?: DatasetSchemaDefinition,
+  ) => Promise<void>;
+  onRerender: () => void;
+};
+
+export function openSettingsModal(handlers: SettingsHandlers): void {
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
   const dialog = document.createElement("div");
-  dialog.className = "modal";
+  dialog.className = "modal modal-wide settings-modal";
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-label", "Einstellungen");
 
   const s = getWebDavSettings();
+  const selectedScan = appState.selectedLocId
+    ? appState.scans.find((sc) => sc.meta.locId === appState.selectedLocId)
+    : undefined;
 
   dialog.innerHTML = `
     <h2>Einstellungen</h2>
-    <h3>System</h3>
-    <p class="muted">Schemata inkl. <strong>Lox-Prefix</strong> (<code id="schema-prefix-hint"></code> beim Standard-Schema), Felder, Layout und Tabellenspalten.</p>
-    <button type="button" class="btn" data-action="system-config">Systemkonfiguration…</button>
-    <h3>WebDAV (Synology)</h3>
-    <label>Basis-URL <input class="field" name="baseUrl" type="url" placeholder="https://nas.example/webdav/r-base" /></label>
-    <label>Benutzer <input class="field" name="username" autocomplete="username" /></label>
-    <label>Passwort <input class="field" name="password" type="password" autocomplete="current-password" /></label>
-    <p class="muted">URL und Benutzer werden in <code>r-base.project.json</code> im Stammordner gespeichert. Das Passwort bleibt nur in dieser Sitzung (RAM).</p>
+
+    <section class="settings-section">
+      <h3>Schemata &amp; Sichtbarkeit</h3>
+      <p class="muted settings-intro">
+        Felder, Tabellenspalten, Detail-Layout und Ein-/Ausblenden — gespeichert in
+        <code>r-base.project.json</code> (Lox-Prefix am Standard-Schema:
+        <code id="schema-prefix-hint"></code>).
+      </p>
+      <label class="settings-row">
+        <span>Schema für Tabellenansicht</span>
+        <select class="field" data-list-schema></select>
+      </label>
+      <div class="settings-btn-row">
+        <button type="button" class="btn" data-action="system-config">Schemata verwalten…</button>
+        <button type="button" class="btn" data-action="edit-liste">Listenansicht…</button>
+        <button type="button" class="btn" data-action="edit-detail">Detailformular…</button>
+      </div>
+      <div class="settings-btn-row" data-dataset-row hidden>
+        <button type="button" class="btn" data-action="edit-dataset">Aktueller Datensatz: Sichtbarkeit…</button>
+      </div>
+      <p class="muted settings-hint" data-dataset-hint hidden></p>
+    </section>
+
+    <section class="settings-section">
+      <h3>WebDAV (Synology)</h3>
+      <label>Basis-URL <input class="field" name="baseUrl" type="url" placeholder="https://nas.example/webdav/r-base" /></label>
+      <label>Benutzer <input class="field" name="username" autocomplete="username" /></label>
+      <label>Passwort <input class="field" name="password" type="password" autocomplete="current-password" /></label>
+      <p class="muted">URL und Benutzer werden in der Projektdatei gespeichert. Das Passwort bleibt nur in dieser Sitzung (RAM).</p>
+    </section>
+
     <div class="modal-actions">
       <button type="button" class="btn" data-action="test">Verbindung testen</button>
       <button type="button" class="btn btn-primary" data-action="save">Speichern</button>
@@ -40,23 +84,92 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
 
   const prefixHint = dialog.querySelector<HTMLElement>("#schema-prefix-hint");
   if (prefixHint) prefixHint.textContent = `${getLoxIdPrefix()}-XXXX-XXXX`;
+
+  const listSchemaSelect = dialog.querySelector<HTMLSelectElement>("[data-list-schema]")!;
+  const activeListId = appState.listViewSchemaId ?? getDefaultSchemaId();
+  const cfg = loadSystemSchemaConfig();
+  for (const schema of cfg.schemas) {
+    const opt = document.createElement("option");
+    opt.value = schema.id;
+    opt.textContent = schema.name;
+    if (schema.id === activeListId) opt.selected = true;
+    listSchemaSelect.append(opt);
+  }
+  listSchemaSelect.disabled = !appState.ready;
+
+  const datasetRow = dialog.querySelector<HTMLElement>("[data-dataset-row]")!;
+  const datasetHint = dialog.querySelector<HTMLElement>("[data-dataset-hint]")!;
+  if (selectedScan && appState.ready) {
+    datasetRow.hidden = false;
+    const bez = selectedScan.meta.bezeichnung.trim() || selectedScan.meta.locId;
+    datasetHint.hidden = false;
+    datasetHint.textContent = `Gilt für „${bez}“ (Detailansicht geöffnet oder ausgewählt).`;
+  }
+
   const baseUrl = dialog.querySelector<HTMLInputElement>('input[name="baseUrl"]')!;
   const username = dialog.querySelector<HTMLInputElement>('input[name="username"]')!;
   const password = dialog.querySelector<HTMLInputElement>('input[name="password"]')!;
   const status = dialog.querySelector<HTMLParagraphElement>("[data-status]")!;
+
   baseUrl.value = s.baseUrl;
   username.value = s.username;
   password.value = getWebDavPassword();
 
-  dialog.querySelector('[data-action="system-config"]')?.addEventListener("click", () => {
+  const close = () => {
     backdrop.remove();
-    openSystemConfigModal(() => onSchemaChanged?.());
+    handlers.onClose();
+  };
+
+  const schemaIdFromListSelect = () => listSchemaSelect.value || getDefaultSchemaId();
+
+  const openEditor = (initialTab: "liste" | "detail", withDataset: boolean) => {
+    const schemaId = withDataset && selectedScan
+      ? resolveSchemaForDataset(selectedScan.meta).id
+      : schemaIdFromListSelect();
+    backdrop.remove();
+    handlers.onClose();
+    openSchemaEditorModal(schemaId, handlers.onRerender, {
+      initialTab: withDataset ? "detail" : initialTab,
+      datasetContext:
+        withDataset && selectedScan
+          ? {
+              locId: selectedScan.meta.locId,
+              getMeta: () =>
+                appState.scans.find((sc) => sc.meta.locId === selectedScan.meta.locId)?.meta,
+              onSetFieldHidden: (fieldKey, hidden, schema) =>
+                handlers.onSetFieldHidden(fieldKey, hidden, schema),
+              onRerender: handlers.onRerender,
+            }
+          : undefined,
+    });
+  };
+
+  listSchemaSelect.addEventListener("change", () => {
+    patchState({ listViewSchemaId: listSchemaSelect.value });
+    handlers.onRerender();
+    status.textContent = "Tabellen-Schema übernommen.";
   });
 
-  dialog.querySelector('[data-action="close"]')?.addEventListener("click", () => {
+  dialog.querySelector('[data-action="system-config"]')?.addEventListener("click", () => {
     backdrop.remove();
-    onClose();
+    handlers.onClose();
+    openSystemConfigModal(() => handlers.onSchemaChanged());
   });
+
+  dialog.querySelector('[data-action="edit-liste"]')?.addEventListener("click", () => {
+    openEditor("liste", false);
+  });
+
+  dialog.querySelector('[data-action="edit-detail"]')?.addEventListener("click", () => {
+    openEditor("detail", false);
+  });
+
+  dialog.querySelector('[data-action="edit-dataset"]')?.addEventListener("click", () => {
+    if (!selectedScan) return;
+    openEditor("detail", true);
+  });
+
+  dialog.querySelector('[data-action="close"]')?.addEventListener("click", () => close());
 
   dialog.querySelector('[data-action="save"]')?.addEventListener("click", () => {
     void (async () => {
@@ -69,8 +182,7 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
         status.textContent = e instanceof Error ? e.message : String(e);
         return;
       }
-      backdrop.remove();
-      onClose();
+      close();
     })();
   });
 
@@ -87,10 +199,7 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
   });
 
   backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) {
-      backdrop.remove();
-      onClose();
-    }
+    if (e.target === backdrop) close();
   });
 
   backdrop.append(dialog);

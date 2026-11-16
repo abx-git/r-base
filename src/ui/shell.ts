@@ -16,9 +16,7 @@ import {
   getDefaultSchema,
   getDefaultSchemaId,
   getSchemaById,
-  loadSystemSchemaConfig,
 } from "../lib/dataset-schema-store";
-import { openSchemaEditorModal } from "./schema-editor-modal";
 import type { DatasetSchemaDefinition, SchemaFieldDef } from "../lib/dataset-schema-types";
 import {
   fieldDefByKey,
@@ -28,7 +26,7 @@ import {
 } from "../lib/meta-field-access";
 import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
-import { getHiddenFieldKeySet, resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
+import { resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
 import { visibleTableColumns } from "../lib/table-layout";
 
 let previewUrl: string | null = null;
@@ -285,27 +283,6 @@ function tableListSchema(): DatasetSchemaDefinition {
   return getSchemaById(id) ?? getDefaultSchema();
 }
 
-function openSchemaVisibilityEditor(handlers: ShellHandlers, detailMeta?: DatasetMeta): void {
-  const scan = getSelectedScan();
-  const schemaId = detailMeta
-    ? resolveSchemaForDataset(detailMeta).id
-    : (appState.listViewSchemaId ?? getDefaultSchemaId());
-  openSchemaEditorModal(schemaId, handlers.onRerender, {
-    initialTab: "visibility",
-    datasetContext:
-      detailMeta && scan && scan.meta.locId === detailMeta.locId
-        ? {
-            locId: scan.meta.locId,
-            getMeta: () =>
-              appState.scans.find((s) => s.meta.locId === scan.meta.locId)?.meta,
-            onSetFieldHidden: (fieldKey, hidden, schema) =>
-              handlers.onSetFieldHidden(fieldKey, hidden, schema),
-            onRerender: handlers.onRerender,
-          }
-        : undefined,
-  });
-}
-
 function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const listSchema = tableListSchema();
   const columns = visibleTableColumns(listSchema);
@@ -361,34 +338,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     patchState({ tableSelection: [] });
     handlers.onRerender();
   });
-  const schemaLabel = el("label", "table-schema-picker");
-  schemaLabel.textContent = "Tabellen-Schema:";
-  const schemaSelect = el("select", "table-schema-select");
-  const cfg = loadSystemSchemaConfig();
-  const activeListId = appState.listViewSchemaId ?? getDefaultSchemaId();
-  for (const s of cfg.schemas) {
-    const opt = el("option");
-    opt.value = s.id;
-    opt.textContent = s.name;
-    if (s.id === activeListId) opt.selected = true;
-    schemaSelect.append(opt);
-  }
-  schemaSelect.disabled = !appState.ready;
-  schemaSelect.title = "Spalten und Sichtbarkeit für die Tabellenansicht";
-  schemaSelect.addEventListener("change", () => {
-    patchState({ listViewSchemaId: schemaSelect.value });
-    handlers.onRerender();
-  });
-  schemaLabel.append(schemaSelect);
-
-  const layoutBtn = el("button", "btn");
-  layoutBtn.type = "button";
-  layoutBtn.textContent = "Sichtbarkeit…";
-  layoutBtn.title = "Schema: Tabellenspalten und Detail-Maske (Systemkonfiguration)";
-  layoutBtn.disabled = !appState.ready;
-  layoutBtn.addEventListener("click", () => openSchemaVisibilityEditor(handlers));
-
-  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear, schemaLabel, layoutBtn);
+  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear);
 
   const tableWrap = el("div", "table-wrap");
   const table = el("table", "data-table data-table--compact");
@@ -995,13 +945,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
     void handlers.onSoftDeleteDataset();
   });
 
-  const layoutBtn = el("button", "btn");
-  layoutBtn.type = "button";
-  layoutBtn.textContent = "Sichtbarkeit…";
-  layoutBtn.title = "Schema-Sichtbarkeit für diesen Datensatz und das Schema";
-  layoutBtn.addEventListener("click", () => openSchemaVisibilityEditor(handlers, scan.meta));
-
-  toolbar.append(back, prev, status, next, layoutBtn, delDs);
+  toolbar.append(back, prev, status, next, delDs);
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
