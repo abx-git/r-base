@@ -28,7 +28,12 @@ import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } fro
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 import { resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
 import { visibleTableColumns } from "../lib/table-layout";
-import { buildMetaByLocId, findScanByLocId, metaForLocId } from "../lib/dataset-scan-match";
+import {
+  buildMetaByLocId,
+  findScanByLocId,
+  locIdsReferToSameRecord,
+  metaForLocId,
+} from "../lib/dataset-scan-match";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -573,6 +578,8 @@ function appendSchemaFormChunk(main: HTMLElement): HTMLDivElement {
   return form;
 }
 
+const DETAIL_FALLBACK_FIELD_KEYS = ["locId", "bezeichnung", "kategorie", "notes", "tags"] as const;
+
 function renderSchemaDetailForm(
   main: HTMLElement,
   scan: { meta: import("../lib/meta-schema").DatasetMeta },
@@ -584,10 +591,11 @@ function renderSchemaDetailForm(
   let form = appendSchemaFormChunk(main);
   let filesInserted = false;
   const hiddenKeys = options?.hiddenFieldKeys ?? new Set<string>();
+  let renderedFieldCount = 0;
 
   for (const row of layout) {
     let rowEl = el("div", "schema-form-row");
-    for (const container of row.containers) {
+    for (const container of row.containers ?? []) {
       const box = el("section", "schema-form-container");
       box.style.gridColumn = `span ${container.colSpan ?? 12}`;
       if (container.title?.trim()) {
@@ -595,14 +603,16 @@ function renderSchemaDetailForm(
         title.textContent = container.title;
         box.append(title);
       }
-      const keys = container.fieldKeys.length
-        ? container.fieldKeys
+      const fieldKeys = container.fieldKeys ?? [];
+      const keys = fieldKeys.length
+        ? fieldKeys
         : schema.fields.filter((f) => f.key !== "locId").map((f) => f.key);
       for (const key of keys) {
         const def = fieldDefByKey(schema.fields, key);
         if (!def) continue;
         if (hiddenKeys.has(key)) continue;
         renderSchemaFieldInput(box, def, scan, handlers);
+        renderedFieldCount++;
       }
       rowEl.append(box);
 
@@ -622,6 +632,25 @@ function renderSchemaDetailForm(
   }
 
   if (options?.renderFiles && !filesInserted) options.renderFiles(main);
+
+  if (renderedFieldCount === 0) {
+    const box = el("section", "schema-form-container");
+    const title = el("h3", "schema-container-title");
+    title.textContent = "Metadaten";
+    box.append(title);
+    for (const key of DETAIL_FALLBACK_FIELD_KEYS) {
+      if (hiddenKeys.has(key)) continue;
+      const def = fieldDefByKey(schema.fields, key);
+      if (!def) continue;
+      renderSchemaFieldInput(box, def, scan, handlers);
+      renderedFieldCount++;
+    }
+    if (renderedFieldCount > 0) {
+      const rowEl = el("div", "schema-form-row");
+      rowEl.append(box);
+      form.append(rowEl);
+    }
+  }
 }
 
 function parseObsoleteFieldInput(raw: string): unknown {
@@ -786,14 +815,15 @@ function navigateFilteredDetail(delta: number): void {
   const rows = filteredDetailRows();
   if (!rows.length) return;
   const selected = appState.selectedLocId;
-  let index = selected ? rows.findIndex((r) => r.locId === selected) : -1;
+  let index = selected ? rows.findIndex((r) => locIdsReferToSameRecord(r.locId, selected)) : -1;
   if (index < 0) {
     index = delta > 0 ? -1 : rows.length;
   }
   const nextIndex = (index + delta + rows.length) % rows.length;
   const next = rows[nextIndex];
-  if (!next || next.locId === selected) return;
-  patchState({ selectedLocId: next.locId, view: "detail" });
+  if (!next || (selected && locIdsReferToSameRecord(next.locId, selected))) return;
+  const scan = findScanByLocId(appState.scans, next.locId);
+  patchState({ selectedLocId: scan?.meta.locId ?? next.locId, view: "detail" });
 }
 
 function renderDatasetFilesSection(
@@ -897,12 +927,21 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   if (!scan) {
     const miss = el("div", "detail-missing");
     const p = el("p", "muted");
-    p.textContent = "Datensatz nicht gefunden oder nicht geladen.";
+    p.textContent =
+      appState.scans.length === 0
+        ? "Kein Stammordner geladen — bitte oben „Ordner wählen“ und den Datenordner verbinden."
+        : "Datensatz nicht gefunden oder nicht geladen.";
     const back = el("button", "btn");
     back.type = "button";
     back.textContent = "← Zurück zur Tabelle";
     back.addEventListener("click", () => patchState({ view: "table", selectedLocId: null }));
-    miss.append(p, back);
+    miss.append(p);
+    if (appState.selectedLocId) {
+      const idHint = el("p", "muted");
+      idHint.textContent = `Gesuchte ID: ${displayLocId(appState.selectedLocId)}`;
+      miss.append(idHint);
+    }
+    miss.append(back);
     main.append(miss);
     return;
   }
@@ -910,7 +949,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   clearPreview();
 
   const rows = filteredDetailRows();
-  const index = rows.findIndex((r) => r.locId === scan.meta.locId);
+  const index = rows.findIndex((r) => locIdsReferToSameRecord(r.locId, scan.meta.locId));
   const hasFilter = hasActiveRecordFilter(currentRecordFilter());
 
   const toolbar = el("div", "detail-toolbar");

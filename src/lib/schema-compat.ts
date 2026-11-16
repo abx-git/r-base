@@ -36,6 +36,32 @@ function unhideCoreTableFields(hidden: Set<string>, schema: DatasetSchemaDefinit
   }
 }
 
+/** Detail-Layout: container-meta mit Kernfeldern (Editor/Import können sie entfernt haben). */
+export function ensureMetaDetailLayout(schema: DatasetSchemaDefinition): void {
+  let metaContainer = schema.layout.flatMap((r) => r.containers ?? []).find((c) => c.id === "container-meta");
+  if (!metaContainer) {
+    metaContainer = {
+      id: "container-meta",
+      title: "Metadaten",
+      colSpan: 12,
+      fieldKeys: [],
+    };
+    const row = schema.layout.find((r) => (r.containers ?? []).length > 0) ?? schema.layout[0];
+    if (row) {
+      if (!row.containers) row.containers = [];
+      row.containers.unshift(metaContainer);
+    } else {
+      schema.layout.push({ id: "row-main", containers: [metaContainer] });
+    }
+  }
+  if (!metaContainer.fieldKeys) metaContainer.fieldKeys = [];
+  for (const key of ["locId", "bezeichnung", "kategorie", "notes", "tags"]) {
+    if (schema.fields.some((f) => f.key === key) && !metaContainer.fieldKeys.includes(key)) {
+      metaContainer.fieldKeys.unshift(key);
+    }
+  }
+}
+
 function ensureColumn(schema: DatasetSchemaDefinition, col: TableColumnDef): void {
   const id = tableColumnId(col);
   if (!schema.tableColumns.some((c) => tableColumnId(c) === id)) {
@@ -74,14 +100,7 @@ export function repairSchemaDefinition(schema: DatasetSchemaDefinition): Dataset
     if (!next.defaultHiddenDetailFieldKeys.length) delete next.defaultHiddenDetailFieldKeys;
   }
 
-  const metaContainer = next.layout.flatMap((r) => r.containers).find((c) => c.id === "container-meta");
-  if (metaContainer) {
-    for (const key of ["locId", "bezeichnung", "kategorie", "tags"]) {
-      if (next.fields.some((f) => f.key === key) && !metaContainer.fieldKeys.includes(key)) {
-        metaContainer.fieldKeys.unshift(key);
-      }
-    }
-  }
+  ensureMetaDetailLayout(next);
 
   if (!next.layout.length) next.layout = structuredClone(defaults.layout);
 

@@ -1,4 +1,4 @@
-import { appState, patchState } from "./state";
+import { appState, getSelectedScan, patchState } from "./state";
 import { mountShell, setPreviewContent } from "./ui/shell";
 import { openSettingsModal } from "./ui/settings-modal";
 import {
@@ -102,7 +102,7 @@ async function handleSetFieldHidden(
   hidden: boolean,
   schemaOverride?: DatasetSchemaDefinition,
 ): Promise<void> {
-  const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+  const scan = getSelectedScan();
   if (!scan) return;
   const schema = schemaOverride ?? resolveSchemaForDataset(scan.meta);
   setSchemaFieldHidden(scan.meta, schema, fieldKey, hidden);
@@ -243,14 +243,14 @@ export function startApp(container: HTMLElement): void {
       });
     },
     onMetaChange: async (partial) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       Object.assign(scan.meta, partial);
       await writeMetaToFolder(scan.handle, scan.meta);
       await reloadFromDisk();
     },
     onMetaFieldChange: async (fieldKey, value) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       setMetaFieldValue(scan.meta, fieldKey, value);
       scan.meta.lastModified = new Date().toISOString();
@@ -258,14 +258,14 @@ export function startApp(container: HTMLElement): void {
       await reloadFromDisk();
     },
     onAddFiles: async (files) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       await addFilesToDataset(scan.handle, scan.meta, files);
       await reloadFromDisk();
       patchState({ message: `${files.length} Datei(en) hinzugefügt.` });
     },
     onPreviewFile: async (relativePath) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       const file = await readFileAtPath(scan.handle, relativePath);
       if (!file) return;
@@ -276,28 +276,28 @@ export function startApp(container: HTMLElement): void {
       else setPreviewContent("none", null);
     },
     getFileObjectUrl: async (relativePath) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) throw new Error("Kein Datensatz");
       const file = await readFileAtPath(scan.handle, relativePath);
       if (!file) throw new Error("Datei fehlt");
       return URL.createObjectURL(file);
     },
     onDeleteFile: async (relativePath) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       await deleteFileFromDataset(scan.handle, scan.meta, relativePath);
       await reloadFromDisk();
       patchState({ message: "Datei gelöscht." });
     },
     onFileMetaChange: async (relativePath, patch) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       await updateFileUserMeta(scan.handle, scan.meta, relativePath, patch);
       await reloadFromDisk();
     },
     onChangeDatasetId: async (rawNewId) => {
       if (!appState.rootHandle) return;
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       const updated = await renameDatasetLocId(appState.rootHandle, scan, rawNewId);
       await reloadFromDisk();
@@ -309,7 +309,7 @@ export function startApp(container: HTMLElement): void {
     },
     onSoftDeleteDataset: async () => {
       if (!appState.rootHandle) return;
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const scan = getSelectedScan();
       if (!scan) return;
       try {
         const moved = await softDeleteDataset(appState.rootHandle, scan);
