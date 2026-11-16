@@ -573,7 +573,7 @@ type SchemaDetailFormOptions = {
 };
 
 function appendSchemaFormChunk(main: HTMLElement): HTMLDivElement {
-  const form = el("div", "detail-form schema-layout");
+  const form = el("div", "detail-form schema-layout detail-form--compact");
   main.append(form);
   return form;
 }

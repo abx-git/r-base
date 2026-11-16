@@ -11,6 +11,7 @@ import {
   mapInitialTab,
   type SchemaEditorInitialTab,
   type SchemaEditorTabId,
+  consolidateDetailLayout,
   validateDraft,
   validationErrorTab,
 } from "./schema-editor-shared";
@@ -88,6 +89,7 @@ export function openSchemaEditorModal(
   });
 
   shell.bindSave(() => {
+    consolidateDetailLayout(draft);
     const err = validateDraft(draft);
     if (err) {
       shell.setStatus(err);

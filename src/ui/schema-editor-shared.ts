@@ -2,6 +2,7 @@ import type {
   DatasetSchemaDefinition,
   FieldDataType,
   LayoutContainer,
+  LayoutRow,
   SchemaFieldDef,
 } from "../lib/dataset-schema-types";
 
@@ -134,6 +135,34 @@ export function findContainer(draft: DatasetSchemaDefinition, id: string): Layou
     }
   }
   return undefined;
+}
+
+/** Editor + Speichern: eine Zeile, Container nebeneinander über colSpan. */
+export function consolidateDetailLayout(draft: DatasetSchemaDefinition): void {
+  if (!draft.layout.length) {
+    draft.layout = [{ id: "row-main", containers: [] }];
+    return;
+  }
+  const containers = draft.layout.flatMap((r) => r.containers ?? []);
+  draft.layout = [{ id: "row-main", containers }];
+}
+
+export function ensureDetailLayoutRow(draft: DatasetSchemaDefinition): LayoutRow {
+  consolidateDetailLayout(draft);
+  let row = draft.layout[0]!;
+  if (!row.containers) row.containers = [];
+  return row;
+}
+
+export function moveFieldInContainer(container: LayoutContainer, fieldKey: string, delta: number): void {
+  const idx = container.fieldKeys.indexOf(fieldKey);
+  if (idx < 0) return;
+  const next = idx + delta;
+  if (next < 0 || next >= container.fieldKeys.length) return;
+  const keys = container.fieldKeys;
+  const tmp = keys[idx]!;
+  keys[idx] = keys[next]!;
+  keys[next] = tmp;
 }
 
 export function unassignedFieldKeys(draft: DatasetSchemaDefinition): string[] {
