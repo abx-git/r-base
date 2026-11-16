@@ -38,11 +38,12 @@ export function openLayoutModal(
 
   const title = el("h2");
   title.textContent = "Layout";
-  const intro = el("p", "muted");
+  const intro = el("p", "muted layout-modal-intro");
   intro.textContent =
     "Steuert die sichtbaren Felder in der Detail-Maske (nur dieser Datensatz) und Spalten in der Tabelle (Projekt / Schema).";
 
-  dialog.append(title, intro);
+  const scroll = el("div", "layout-modal-scroll");
+  dialog.append(title, intro, scroll);
 
   const schema = options?.meta ? resolveSchemaForDataset(options.meta) : getDefaultSchema();
   const hiddenDetail = options?.meta ? getHiddenFieldKeySet(options.meta, schema) : null;
@@ -53,9 +54,9 @@ export function openLayoutModal(
     secTitle.textContent = `Detail-Maske — ${bez} (${displayLocId(options.meta.locId)})`;
     const hint = el("p", "muted layout-modal-hint");
     hint.textContent = "Optionale Felder können ausgeblendet werden; Pflichtfelder bleiben sichtbar.";
-    dialog.append(secTitle, hint);
+    scroll.append(secTitle, hint);
 
-    const list = el("ul", "hidden-field-reveal-list");
+    const list = el("ul", "hidden-field-reveal-list layout-modal-list");
     for (const key of orderedSchemaFieldKeys(schema)) {
       const def = fieldDefByKey(schema.fields, key);
       if (!def) continue;
@@ -84,11 +85,11 @@ export function openLayoutModal(
       }
       list.append(li);
     }
-    dialog.append(list);
+    scroll.append(list);
   } else {
     const note = el("p", "muted layout-modal-hint");
     note.textContent = "Detail-Maske: Datensatz in der Detailansicht öffnen, um Felder pro Datensatz anzupassen.";
-    dialog.append(note);
+    scroll.append(note);
   }
 
   const tableTitle = el("h3");
@@ -96,10 +97,10 @@ export function openLayoutModal(
   const tableHint = el("p", "muted layout-modal-hint");
   tableHint.textContent =
     "Spalten in der Liste sind in der Tabelle verfügbar. Weitere Felder unten können hinzugefügt werden.";
-  dialog.append(tableTitle, tableHint);
+  scroll.append(tableTitle, tableHint);
 
   const { configured, available } = listTableColumnLayout(schema);
-  const tableList = el("ul", "hidden-field-reveal-list");
+  const tableList = el("ul", "hidden-field-reveal-list layout-modal-list");
 
   for (const row of configured) {
     const li = el("li", "hidden-field-reveal-item");
@@ -118,13 +119,13 @@ export function openLayoutModal(
     li.append(label, btn);
     tableList.append(li);
   }
-  dialog.append(tableList);
+  scroll.append(tableList);
 
   if (available.length) {
     const availTitle = el("h4", "layout-modal-sub");
     availTitle.textContent = "Noch nicht in der Tabelle";
-    dialog.append(availTitle);
-    const availList = el("ul", "hidden-field-reveal-list");
+    scroll.append(availTitle);
+    const availList = el("ul", "hidden-field-reveal-list layout-modal-list");
     for (const cand of available) {
       const li = el("li", "hidden-field-reveal-item");
       const label = el("span", "hidden-field-reveal-label");
@@ -143,10 +144,10 @@ export function openLayoutModal(
       li.append(label, btn);
       availList.append(li);
     }
-    dialog.append(availList);
+    scroll.append(availList);
   }
 
-  const actions = el("div", "modal-actions");
+  const actions = el("div", "modal-actions layout-modal-actions");
   const close = el("button", "btn btn-primary");
   close.type = "button";
   close.textContent = "Schließen";
