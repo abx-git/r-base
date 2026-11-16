@@ -1,5 +1,6 @@
 import type { DatasetSchemaDefinition, SystemSchemaConfig, TableColumnDef } from "./dataset-schema-types";
 import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
+import { ensureFilesLayoutContainer } from "./detail-layout";
 import {
   inferColumnSource,
   isTableColumnHidden,
@@ -101,6 +102,7 @@ export function repairSchemaDefinition(schema: DatasetSchemaDefinition): Dataset
   }
 
   ensureMetaDetailLayout(next);
+  ensureFilesLayoutContainer(next);
 
   if (!next.layout.length) next.layout = structuredClone(defaults.layout);
 

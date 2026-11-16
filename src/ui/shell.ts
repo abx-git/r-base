@@ -27,6 +27,7 @@ import {
 import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 import { resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
+import { isFilesLayoutContainer } from "../lib/detail-layout";
 import { visibleTableColumns } from "../lib/table-layout";
 import {
   buildMetaByLocId,
@@ -566,9 +567,10 @@ function renderSchemaFieldInput(
 }
 
 type SchemaDetailFormOptions = {
-  /** Nach diesem Layout-Container (z. B. Metadaten) Dateien einfügen. */
-  filesInsertAfterContainerId?: string;
-  renderFiles?: (parent: HTMLElement) => void;
+  renderFiles?: (
+    parent: HTMLElement,
+    scan: NonNullable<ReturnType<typeof getSelectedScan>>,
+  ) => void;
   hiddenFieldKeys?: Set<string>;
 };
 
@@ -588,16 +590,33 @@ function renderSchemaDetailForm(
   options?: SchemaDetailFormOptions,
 ): void {
   const layout = schema.layout.length ? schema.layout : getDefaultSchema().layout;
-  let form = appendSchemaFormChunk(main);
-  let filesInserted = false;
+  const form = appendSchemaFormChunk(main);
   const hiddenKeys = options?.hiddenFieldKeys ?? new Set<string>();
   let renderedFieldCount = 0;
+  let filesRendered = false;
 
   for (const row of layout) {
-    let rowEl = el("div", "schema-form-row");
+    const rowEl = el("div", "schema-form-row");
     for (const container of row.containers ?? []) {
+      const colSpan = container.colSpan ?? 12;
+      if (isFilesLayoutContainer(container)) {
+        const box = el("section", "schema-form-container schema-form-container--files");
+        box.style.gridColumn = `span ${colSpan}`;
+        if (container.title?.trim()) {
+          const title = el("h3", "schema-container-title");
+          title.textContent = container.title;
+          box.append(title);
+        }
+        if (options?.renderFiles) {
+          options.renderFiles(box, scan as NonNullable<ReturnType<typeof getSelectedScan>>);
+          filesRendered = true;
+        }
+        rowEl.append(box);
+        continue;
+      }
+
       const box = el("section", "schema-form-container");
-      box.style.gridColumn = `span ${container.colSpan ?? 12}`;
+      box.style.gridColumn = `span ${colSpan}`;
       if (container.title?.trim()) {
         const title = el("h3", "schema-container-title");
         title.textContent = container.title;
@@ -615,23 +634,18 @@ function renderSchemaDetailForm(
         renderedFieldCount++;
       }
       rowEl.append(box);
-
-      if (
-        options?.renderFiles &&
-        options.filesInsertAfterContainerId &&
-        container.id === options.filesInsertAfterContainerId
-      ) {
-        form.append(rowEl);
-        options.renderFiles(main);
-        filesInserted = true;
-        form = appendSchemaFormChunk(main);
-        rowEl = el("div", "schema-form-row");
-      }
     }
     if (rowEl.childNodes.length) form.append(rowEl);
   }
 
-  if (options?.renderFiles && !filesInserted) options.renderFiles(main);
+  if (options?.renderFiles && !filesRendered) {
+    const rowEl = el("div", "schema-form-row");
+    const box = el("section", "schema-form-container schema-form-container--files");
+    box.style.gridColumn = "span 12";
+    options.renderFiles(box, scan as NonNullable<ReturnType<typeof getSelectedScan>>);
+    rowEl.append(box);
+    form.append(rowEl);
+  }
 
   if (renderedFieldCount === 0) {
     const box = el("section", "schema-form-container");
@@ -827,11 +841,11 @@ function navigateFilteredDetail(delta: number): void {
 }
 
 function renderDatasetFilesSection(
-  main: HTMLElement,
+  parent: HTMLElement,
   scan: NonNullable<ReturnType<typeof getSelectedScan>>,
   handlers: ShellHandlers,
 ): void {
-  const section = el("section", "dataset-files-section");
+  const section = el("div", "dataset-files-section dataset-files-section--in-grid");
 
   const drop = el("div", "dropzone");
   drop.textContent = "PDF/Bilder hier ablegen";
@@ -919,7 +933,7 @@ function renderDatasetFilesSection(
     section.append(list);
   }
 
-  main.append(section);
+  parent.append(section);
 }
 
 function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
@@ -1008,8 +1022,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   const schema = resolveSchemaForDataset(scan.meta);
   const hiddenKeys = resolveDetailHiddenKeys(scan.meta, schema);
   renderSchemaDetailForm(main, scan, schema, handlers, {
-    filesInsertAfterContainerId: "container-meta",
-    renderFiles: (parent) => renderDatasetFilesSection(parent, scan, handlers),
+    renderFiles: (parent, s) => renderDatasetFilesSection(parent, s, handlers),
     hiddenFieldKeys: hiddenKeys,
   });
   renderObsoleteFieldsSection(main, scan, schema, handlers);

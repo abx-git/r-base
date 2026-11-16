@@ -354,6 +354,17 @@
   gap: 0.5rem;
 }
 
+.schema-editor-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.schema-editor-files-container .schema-editor-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+}
+
 .schema-editor-container-grid {
   width: 100%;
 }

@@ -5,6 +5,7 @@ import type {
   LayoutRow,
   SchemaFieldDef,
 } from "../lib/dataset-schema-types";
+import { isFilesLayoutContainer } from "../lib/detail-layout";
 
 export type SchemaEditorTabId = "stammdaten" | "felder" | "liste" | "detail";
 
@@ -154,6 +155,16 @@ export function ensureDetailLayoutRow(draft: DatasetSchemaDefinition): LayoutRow
   return row;
 }
 
+export function moveContainerInRow(containers: LayoutContainer[], containerId: string, delta: number): void {
+  const idx = containers.findIndex((c) => c.id === containerId);
+  if (idx < 0) return;
+  const next = idx + delta;
+  if (next < 0 || next >= containers.length) return;
+  const tmp = containers[idx]!;
+  containers[idx] = containers[next]!;
+  containers[next] = tmp;
+}
+
 export function moveFieldInContainer(container: LayoutContainer, fieldKey: string, delta: number): void {
   const idx = container.fieldKeys.indexOf(fieldKey);
   if (idx < 0) return;
@@ -211,7 +222,7 @@ export function enableDrop(
       return;
     }
     const container = findContainer(draft, targetId ?? "");
-    if (!container) return;
+    if (!container || isFilesLayoutContainer(container)) return;
     if (!container.fieldKeys.includes(key)) container.fieldKeys.push(key);
     rerender();
   });

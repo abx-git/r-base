@@ -105,9 +105,16 @@
 }
 
 .detail-form {
-  display: grid;
-  gap: 0.55rem;
+  display: block;
   max-width: min(1080px, 100%);
+}
+
+.detail-form > .schema-form-row {
+  margin-bottom: 0.35rem;
+}
+
+.detail-form > .schema-form-row:last-child {
+  margin-bottom: 0;
 }
 
 .detail-form--compact {
@@ -201,18 +208,46 @@
 }
 
 .dataset-files-section {
-  margin: 0.35rem 0 0.65rem;
-  padding: 0.2rem 0 0.5rem;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  margin: 0;
+  padding: 0;
+}
+
+.dataset-files-section--in-grid {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.schema-form-container--files {
+  align-self: start;
 }
 
 .dataset-files-section .dropzone {
-  margin-top: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.dataset-files-section--in-grid .dropzone {
+  padding: 0.65rem 0.5rem;
+  font-size: 0.82rem;
+  margin-top: 0.25rem;
+}
+
+.dataset-files-section--in-grid .files-heading {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.82rem;
+}
+
+.dataset-files-section--in-grid .thumb-grid {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 0.35rem;
+}
+
+.dataset-files-section--in-grid .thumb-img {
+  height: 52px;
 }
 
 .dropzone {
-  margin-top: 1rem;
+  margin-top: 0.5rem;
   border: 2px dashed var(--line);
   border-radius: 10px;
   padding: 1.25rem;

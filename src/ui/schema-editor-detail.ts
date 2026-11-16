@@ -7,12 +7,18 @@ import {
   resolveDetailHiddenKeys,
 } from "../lib/meta-hidden-fields";
 import {
+  FILES_LAYOUT_CONTAINER_ID,
+  isFilesLayoutContainer,
+  layoutHasFilesContainer,
+} from "../lib/detail-layout";
+import {
   consolidateDetailLayout,
   enableDrop,
   ensureDetailLayoutRow,
   fieldChip,
   hint,
   mkBtn,
+  moveContainerInRow,
   moveFieldInContainer,
   toggleDraftDetailDefaultHidden,
   toggleSwitch,
@@ -95,7 +101,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
 
   parent.append(
     hint(
-      "Container nebeneinander über die Breite. Felder per Drag oder ↑/↓ sortieren. Titel optional (leer = kein Überschrift in der Detailansicht).",
+      "Container nebeneinander über die Breite (←/→ Reihenfolge). „Dateien“ ist ein eigener Container. Felder per Drag oder ↑/↓ sortieren.",
     ),
   );
 
@@ -125,10 +131,12 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
   }
   canvas.append(rowGrid);
 
+  const btnRow = document.createElement("div");
+  btnRow.className = "schema-editor-detail-actions";
   const addCont = document.createElement("button");
   addCont.type = "button";
   addCont.className = "btn";
-  addCont.textContent = "+ Container";
+  addCont.textContent = "+ Feld-Container";
   addCont.addEventListener("click", () => {
     row.containers.push({
       id: `container-${Date.now()}`,
@@ -138,7 +146,23 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
     });
     rerender();
   });
-  canvas.append(addCont);
+  const addFiles = document.createElement("button");
+  addFiles.type = "button";
+  addFiles.className = "btn";
+  addFiles.textContent = "+ Dateien";
+  addFiles.disabled = layoutHasFilesContainer(draft);
+  addFiles.title = "Upload & Miniaturvorschau (einmal pro Schema)";
+  addFiles.addEventListener("click", () => {
+    row.containers.push({
+      id: FILES_LAYOUT_CONTAINER_ID,
+      title: "Dateien",
+      colSpan: 6,
+      fieldKeys: [],
+    });
+    rerender();
+  });
+  btnRow.append(addCont, addFiles);
+  canvas.append(btnRow);
 
   layoutWrap.append(pool, canvas);
   parent.append(layoutWrap);
@@ -192,12 +216,27 @@ function renderContainer(
   allContainers: LayoutContainer[],
   rerender: () => void,
 ): HTMLElement {
+  if (isFilesLayoutContainer(container)) {
+    return renderFilesContainerEditor(container, allContainers, rerender);
+  }
+
   const box = document.createElement("div");
   box.className = "layout-container schema-editor-layout-container";
   box.style.gridColumn = `span ${container.colSpan ?? 12}`;
 
   const head = document.createElement("div");
   head.className = "schema-editor-container-head";
+  const idx = allContainers.indexOf(container);
+  head.append(
+    mkBtn("←", idx <= 0, () => {
+      moveContainerInRow(allContainers, container.id, -1);
+      rerender();
+    }),
+    mkBtn("→", idx < 0 || idx >= allContainers.length - 1, () => {
+      moveContainerInRow(allContainers, container.id, 1);
+      rerender();
+    }),
+  );
 
   const titleIn = document.createElement("input");
   titleIn.className = "field";
@@ -248,6 +287,69 @@ function renderContainer(
   }
   enableDrop(zone, draft, rerender);
   box.append(zone);
+  return box;
+}
+
+function renderFilesContainerEditor(
+  container: LayoutContainer,
+  allContainers: LayoutContainer[],
+  rerender: () => void,
+): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "layout-container schema-editor-layout-container schema-editor-files-container";
+  box.style.gridColumn = `span ${container.colSpan ?? 12}`;
+
+  const head = document.createElement("div");
+  head.className = "schema-editor-container-head";
+  const idx = allContainers.indexOf(container);
+  head.append(
+    mkBtn("←", idx <= 0, () => {
+      moveContainerInRow(allContainers, container.id, -1);
+      rerender();
+    }),
+    mkBtn("→", idx < 0 || idx >= allContainers.length - 1, () => {
+      moveContainerInRow(allContainers, container.id, 1);
+      rerender();
+    }),
+  );
+
+  const badge = document.createElement("span");
+  badge.className = "schema-editor-badge";
+  badge.textContent = "Dateien & Upload";
+  head.append(badge);
+
+  const widthSel = document.createElement("select");
+  widthSel.className = "field schema-editor-container-width";
+  for (const p of WIDTH_PRESETS) {
+    const opt = document.createElement("option");
+    opt.value = String(p.value);
+    opt.textContent = p.label;
+    widthSel.append(opt);
+  }
+  const span = container.colSpan ?? 12;
+  widthSel.value = String(WIDTH_PRESETS.some((p) => p.value === span) ? span : 12);
+  widthSel.addEventListener("change", () => {
+    container.colSpan = Number(widthSel.value) || 12;
+    rerender();
+  });
+
+  const titleIn = document.createElement("input");
+  titleIn.className = "field";
+  titleIn.placeholder = "Titel (optional)";
+  titleIn.value = container.title ?? "Dateien";
+  titleIn.addEventListener("change", () => {
+    container.title = titleIn.value.trim();
+  });
+
+  const removeBtn = mkBtn("×", false, () => {
+    const i = allContainers.indexOf(container);
+    if (i >= 0) allContainers.splice(i, 1);
+    rerender();
+  });
+  removeBtn.classList.add("schema-editor-container-remove");
+  removeBtn.title = "Dateien-Container entfernen";
+  head.append(titleIn, widthSel, removeBtn);
+  box.append(head, hint("Drag & Drop, Miniaturraster und Dateiliste erscheinen hier in der Detailansicht."));
   return box;
 }
 

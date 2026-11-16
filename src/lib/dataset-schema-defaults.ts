@@ -1,4 +1,5 @@
 import type { DatasetSchemaDefinition, SystemSchemaConfig } from "./dataset-schema-types";
+import { FILES_LAYOUT_CONTAINER_ID } from "./detail-layout";
 
 export const BUILTIN_SCHEMA_ID = "rud-v1";
 
@@ -21,9 +22,15 @@ export const DEFAULT_RUD_SCHEMA: DatasetSchemaDefinition = {
       containers: [
         {
           id: "container-meta",
-          title: "Metadaten",
-          colSpan: 12,
+          title: "",
+          colSpan: 6,
           fieldKeys: ["locId", "bezeichnung", "kategorie", "notes", "tags"],
+        },
+        {
+          id: FILES_LAYOUT_CONTAINER_ID,
+          title: "Dateien",
+          colSpan: 6,
+          fieldKeys: [],
         },
       ],
     },
