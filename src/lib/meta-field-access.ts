@@ -1,7 +1,9 @@
 import type { DatasetMeta } from "./meta-schema";
 import type { FieldDataType, SchemaFieldDef } from "./dataset-schema-types";
 
-const CORE_KEYS = new Set(["locId", "bezeichnung", "kategorie", "notes"]);
+import { normalizeDatasetTags } from "./dataset-tags";
+
+const CORE_KEYS = new Set(["locId", "bezeichnung", "kategorie", "notes", "tags"]);
 
 export function getMetaFieldValue(meta: DatasetMeta, fieldKey: string): unknown {
   switch (fieldKey) {
@@ -13,6 +15,8 @@ export function getMetaFieldValue(meta: DatasetMeta, fieldKey: string): unknown 
       return meta.kategorie;
     case "notes":
       return meta.notes;
+    case "tags":
+      return meta.tags ?? [];
     default:
       return meta.data?.[fieldKey];
   }
@@ -32,12 +36,17 @@ export function setMetaFieldValue(meta: DatasetMeta, fieldKey: string, value: un
     meta.notes = value;
     return;
   }
+  if (fieldKey === "tags") {
+    meta.tags = Array.isArray(value) ? normalizeDatasetTags(value) : normalizeDatasetTags(String(value ?? ""));
+    return;
+  }
   if (!CORE_KEYS.has(fieldKey)) {
     if (!meta.data) meta.data = {};
     if (value === null || value === undefined || value === "") {
-      delete meta.data[fieldKey];
-      if (!Object.keys(meta.data).length) delete meta.data;
+      if (meta.data) delete meta.data[fieldKey];
+      if (meta.data && !Object.keys(meta.data).length) delete meta.data;
     } else {
+      if (!meta.data) meta.data = {};
       meta.data[fieldKey] = value;
     }
   }

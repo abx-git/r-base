@@ -13,6 +13,7 @@ export const DEFAULT_RUD_SCHEMA: DatasetSchemaDefinition = {
     { key: "bezeichnung", label: "Bezeichnung", dataType: "string", system: true, constraints: { required: true } },
     { key: "kategorie", label: "Kategorie", dataType: "string" },
     { key: "notes", label: "Notizen", dataType: "text" },
+    { key: "tags", label: "Tags", dataType: "tags" },
   ],
   layout: [
     {
@@ -22,7 +23,7 @@ export const DEFAULT_RUD_SCHEMA: DatasetSchemaDefinition = {
           id: "container-meta",
           title: "Metadaten",
           colSpan: 12,
-          fieldKeys: ["locId", "bezeichnung", "kategorie", "notes"],
+          fieldKeys: ["locId", "bezeichnung", "kategorie", "notes", "tags"],
         },
       ],
     },

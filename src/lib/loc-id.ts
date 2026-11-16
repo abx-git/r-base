@@ -2,6 +2,7 @@
  * Datensatz-Identität = Lox-ID (ET2-Karten), Feldname im JSON weiterhin `locId`.
  */
 
+import { DELETED_DATASET_DIR } from "./dataset-trash";
 import { listChildNames, readTextFromFolder } from "./workspace";
 import { META_FILENAME } from "./meta-schema";
 import { getLoxIdPrefix } from "./id-config";
@@ -39,16 +40,19 @@ export function locIdsEqual(a: string, b: string): boolean {
   return parseLocIdToken(a).toUpperCase() === parseLocIdToken(b).toUpperCase();
 }
 
-async function collectTakenIds(root: FileSystemDirectoryHandle): Promise<Set<string>> {
-  const taken = new Set<string>();
-  const children = await listChildNames(root);
+async function collectTakenInParent(
+  parent: FileSystemDirectoryHandle,
+  taken: Set<string>,
+  skipNames: Set<string>,
+): Promise<void> {
+  const children = await listChildNames(parent);
   for (const child of children) {
-    if (child.kind !== "directory") continue;
+    if (child.kind !== "directory" || skipNames.has(child.name)) continue;
     taken.add(child.name.toUpperCase());
     const fromFolder = parseLocIdToken(child.name);
     if (fromFolder) taken.add(fromFolder.toUpperCase());
     try {
-      const folder = await root.getDirectoryHandle(child.name);
+      const folder = await parent.getDirectoryHandle(child.name);
       const metaText = await readTextFromFolder(folder, META_FILENAME);
       if (!metaText) continue;
       const raw = JSON.parse(metaText) as Record<string, unknown>;
@@ -57,6 +61,17 @@ async function collectTakenIds(root: FileSystemDirectoryHandle): Promise<Set<str
     } catch {
       /* ignore */
     }
+  }
+}
+
+async function collectTakenIds(root: FileSystemDirectoryHandle): Promise<Set<string>> {
+  const taken = new Set<string>();
+  await collectTakenInParent(root, taken, new Set([DELETED_DATASET_DIR]));
+  try {
+    const trash = await root.getDirectoryHandle(DELETED_DATASET_DIR);
+    await collectTakenInParent(trash, taken, new Set());
+  } catch {
+    /* kein Papierkorb */
   }
   return taken;
 }

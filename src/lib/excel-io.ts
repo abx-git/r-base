@@ -9,6 +9,7 @@ export type ExcelRow = {
   locId: string;
   bezeichnung: string;
   kategorie: string;
+  tags: string;
   dateianzahl: number;
   lastModified: string;
 };
@@ -18,6 +19,7 @@ export function exportMetadataXlsx(scans: DatasetScan[]): Blob {
     locId: displayLocId(s.meta.locId),
     bezeichnung: s.meta.bezeichnung,
     kategorie: s.meta.kategorie,
+    tags: (s.meta.tags ?? []).join(", "),
     dateianzahl: s.meta.files.length,
     lastModified: s.meta.lastModified,
   }));

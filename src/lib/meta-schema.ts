@@ -1,3 +1,4 @@
+import { normalizeDatasetTags } from "./dataset-tags";
 import { getDefaultSchemaId } from "./dataset-schema-store";
 import { formatLocIdDisplay, isLoxId, parseLocIdToken } from "./loc-id";
 
@@ -89,10 +90,11 @@ export type DatasetMeta = {
   kategorie: string;
   lastModified: string;
   notes: string;
+  tags: string[];
   files: MetaFileEntry[];
   sync: MetaSyncBlock;
-  /** Schema-definierte Zusatzfelder (nicht Kern) */
-  data?: Record<string, string | number | boolean | string[] | null>;
+  /** Benutzerfelder & archivierte Schlüssel (nicht im aktuellen Schema) */
+  data?: Record<string, unknown>;
 };
 
 export type SyncStatusKind = "unknown" | "synced" | "local-changes" | "remote-only" | "blocked";
@@ -134,21 +136,53 @@ function extractLegacyLocId(raw: Record<string, unknown>, folderName: string): s
   return "";
 }
 
-function normalizeDataBlock(raw: unknown): DatasetMeta["data"] {
-  if (!isRecord(raw)) return undefined;
+/** Bekannte meta.json-Felder — alles andere wird in `data` aufbewahrt */
+export const META_SYSTEM_KEYS = new Set([
+  "schemaVersion",
+  "locId",
+  "schemaKey",
+  "bezeichnung",
+  "kategorie",
+  "lastModified",
+  "notes",
+  "tags",
+  "files",
+  "sync",
+  "data",
+  "id",
+  "uuid",
+]);
+
+function isStorableDataValue(v: unknown): boolean {
+  if (v === null) return true;
+  const t = typeof v;
+  if (t === "string" || t === "number" || t === "boolean") return true;
+  if (Array.isArray(v)) return true;
+  if (t === "object") return true;
+  return false;
+}
+
+function mergeUnknownTopLevelIntoData(
+  src: Record<string, unknown>,
+  data: NonNullable<DatasetMeta["data"]>,
+): NonNullable<DatasetMeta["data"]> {
+  for (const [k, v] of Object.entries(src)) {
+    if (META_SYSTEM_KEYS.has(k)) continue;
+    if (Object.prototype.hasOwnProperty.call(data, k)) continue;
+    if (isStorableDataValue(v)) data[k] = v;
+  }
+  return data;
+}
+
+function normalizeDataBlock(raw: unknown, src?: Record<string, unknown>): DatasetMeta["data"] {
   const out: NonNullable<DatasetMeta["data"]> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (typeof k !== "string" || !k.trim()) continue;
-    if (
-      typeof v === "string" ||
-      typeof v === "number" ||
-      typeof v === "boolean" ||
-      v === null ||
-      (Array.isArray(v) && v.every((x) => typeof x === "string"))
-    ) {
-      out[k] = v as NonNullable<DatasetMeta["data"]>[string];
+  if (isRecord(raw)) {
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof k !== "string" || !k.trim()) continue;
+      if (isStorableDataValue(v)) out[k] = v;
     }
   }
+  if (src) mergeUnknownTopLevelIntoData(src, out);
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -163,6 +197,7 @@ export function createEmptyMeta(locId: string, partial?: Partial<Pick<DatasetMet
     kategorie: partial?.kategorie?.trim() || "",
     lastModified: now,
     notes: "",
+    tags: [],
     files: [],
     sync: { lastSyncedAt: null, remoteEtag: null },
   };
@@ -181,7 +216,7 @@ export function normalizeMeta(raw: unknown, folderName = ""): DatasetMeta {
   }
   const syncRaw = isRecord(src.sync) ? src.sync : {};
   const schemaKey = asString(src.schemaKey) || undefined;
-  const data = normalizeDataBlock(src.data);
+  const data = normalizeDataBlock(src.data, src);
   return {
     schemaVersion: META_SCHEMA_VERSION,
     locId,
@@ -190,6 +225,7 @@ export function normalizeMeta(raw: unknown, folderName = ""): DatasetMeta {
     kategorie: asString(src.kategorie),
     lastModified: asString(src.lastModified, new Date().toISOString()),
     notes: asString(src.notes),
+    tags: normalizeDatasetTags(src.tags),
     ...(data ? { data } : {}),
     files,
     sync: {

@@ -10,6 +10,7 @@ export type IndexRecord = {
   locId: string;
   bezeichnung: string;
   kategorie: string;
+  tags: string[];
   fileCount: number;
   lastModified: string;
   syncStatus: SyncStatusKind;
@@ -46,6 +47,7 @@ export function recordFromScan(scan: DatasetScan, syncStatus: SyncStatusKind = "
     locId: scan.meta.locId,
     bezeichnung: scan.meta.bezeichnung,
     kategorie: scan.meta.kategorie,
+    tags: [...(scan.meta.tags ?? [])],
     fileCount: scan.meta.files.length,
     lastModified: scan.meta.lastModified,
     syncStatus,
@@ -116,20 +118,6 @@ export async function loadGlobalSync(): Promise<GlobalSyncMeta> {
       pendingCount: 0,
     }
   );
-}
-
-export function filterRecords(records: IndexRecord[], query: string, kategorie: string): IndexRecord[] {
-  const q = query.trim().toLowerCase();
-  const k = kategorie.trim().toLowerCase();
-  return records.filter((r) => {
-    if (k && r.kategorie.toLowerCase() !== k) return false;
-    if (!q) return true;
-    return (
-      r.locId.toLowerCase().includes(q) ||
-      r.bezeichnung.toLowerCase().includes(q) ||
-      r.kategorie.toLowerCase().includes(q)
-    );
-  });
 }
 
 export function syncStatusAfterLocalEdit(): SyncStatusKind {

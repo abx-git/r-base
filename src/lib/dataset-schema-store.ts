@@ -37,11 +37,24 @@ function normalizeConfig(config: SystemSchemaConfig): SystemSchemaConfig {
   return { configVersion: 1, defaultSchemaId, schemas: config.schemas.map(normalizeSchema) };
 }
 
+function ensureBuiltinTagsField(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
+  if (schema.id !== BUILTIN_SCHEMA_ID || schema.fields.some((f) => f.key === "tags")) return schema;
+  const next = structuredClone(schema);
+  next.fields.push({ key: "tags", label: "Tags", dataType: "tags" });
+  for (const row of next.layout) {
+    for (const c of row.containers) {
+      if (c.fieldKeys.includes("notes") && !c.fieldKeys.includes("tags")) c.fieldKeys.push("tags");
+    }
+  }
+  return next;
+}
+
 function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
   const colSpan = (n?: number) => (typeof n === "number" && n >= 1 && n <= 12 ? n : 12);
+  const base = schema.id === BUILTIN_SCHEMA_ID ? ensureBuiltinTagsField(schema) : schema;
   return {
-    ...schema,
-    layout: (schema.layout ?? []).map((row) => ({
+    ...base,
+    layout: (base.layout ?? []).map((row) => ({
       ...row,
       containers: (row.containers ?? []).map((c) => ({
         ...c,
@@ -49,8 +62,8 @@ function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefiniti
         fieldKeys: [...(c.fieldKeys ?? [])],
       })),
     })),
-    fields: [...(schema.fields ?? [])],
-    tableColumns: [...(schema.tableColumns ?? [])],
+    fields: [...(base.fields ?? [])],
+    tableColumns: [...(base.tableColumns ?? [])],
   };
 }
 

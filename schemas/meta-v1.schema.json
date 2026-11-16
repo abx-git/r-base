@@ -10,6 +10,7 @@
     "kategorie": { "type": "string" },
     "lastModified": { "type": "string", "format": "date-time" },
     "notes": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
     "files": {
       "type": "array",
       "items": {

@@ -199,3 +199,17 @@ export async function moveDatasetFolder(
   await root.removeEntry(fromFolderName, { recursive: true });
   return dest;
 }
+
+/** Verschiebt einen Ordner von einem Elternverzeichnis in ein anderes (Kopie + Löschen). */
+export async function relocateDirectory(
+  fromParent: FileSystemDirectoryHandle,
+  toParent: FileSystemDirectoryHandle,
+  sourceName: string,
+  destName = sourceName,
+): Promise<FileSystemDirectoryHandle> {
+  const source = await fromParent.getDirectoryHandle(sourceName);
+  const dest = await toParent.getDirectoryHandle(destName, { create: true });
+  await copyDirectoryContents(source, dest);
+  await fromParent.removeEntry(sourceName, { recursive: true });
+  return dest;
+}

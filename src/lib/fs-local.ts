@@ -17,16 +17,20 @@ import {
   metaToJson,
   normalizeMeta,
 } from "./meta-schema";
+import { DELETED_DATASET_DIR } from "./dataset-trash";
 import {
   getDirectoryAtPath,
   listChildNames,
   listRelativeFiles,
   moveDatasetFolder,
   readTextFromFolder,
+  relocateDirectory,
   removeFileAtPath,
   writeFileInFolder,
   writeTextInFolder,
 } from "./workspace";
+
+export { DELETED_DATASET_DIR };
 
 const SKIP_SCAN = new Set([META_FILENAME, ".DS_Store"]);
 
@@ -116,7 +120,7 @@ export async function scanAllDatasets(root: FileSystemDirectoryHandle): Promise<
   const children = await listChildNames(root);
   const datasets: DatasetScan[] = [];
   for (const child of children) {
-    if (child.kind !== "directory" || SKIP_SCAN.has(child.name)) continue;
+    if (child.kind !== "directory" || SKIP_SCAN.has(child.name) || child.name === DELETED_DATASET_DIR) continue;
     const handle = await root.getDirectoryHandle(child.name);
     const meta = await readMetaFromFolder(handle, child.name);
     const folderKey = parseLocIdToken(child.name);
@@ -223,4 +227,36 @@ export async function renameDatasetLocId(
 
 export function isImagePath(path: string): boolean {
   return /\.(jpe?g|png|gif|webp|svg)$/i.test(path);
+}
+
+export async function softDeleteDataset(
+  root: FileSystemDirectoryHandle,
+  scan: DatasetScan,
+): Promise<{ locId: string; folderName: string }> {
+  const trash = await root.getDirectoryHandle(DELETED_DATASET_DIR, { create: true });
+  const trashChildren = await listChildNames(trash);
+  let targetName = scan.folderName;
+  if (trashChildren.some((c) => c.kind === "directory" && c.name === targetName)) {
+    targetName = `${scan.folderName}__${Date.now()}`;
+  }
+  await relocateDirectory(root, trash, scan.folderName, targetName);
+  return { locId: scan.meta.locId, folderName: targetName };
+}
+
+export async function restoreSoftDeletedDataset(
+  root: FileSystemDirectoryHandle,
+  folderNameInDeleted: string,
+): Promise<DatasetScan> {
+  const trash = await root.getDirectoryHandle(DELETED_DATASET_DIR);
+  const active = await listChildNames(root);
+  const liveName = folderNameInDeleted.replace(/__\d+$/, "");
+  const restoreAs = active.some((c) => c.kind === "directory" && c.name === liveName)
+    ? folderNameInDeleted
+    : liveName;
+  if (active.some((c) => c.kind === "directory" && c.name === restoreAs)) {
+    throw new Error(`Ein aktiver Datensatz-Ordner „${restoreAs}“ existiert bereits.`);
+  }
+  const handle = await relocateDirectory(trash, root, folderNameInDeleted, restoreAs);
+  const meta = await readMetaFromFolder(handle, restoreAs);
+  return { locId: meta.locId, folderName: restoreAs, handle, meta };
 }

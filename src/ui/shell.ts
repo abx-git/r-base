@@ -1,5 +1,7 @@
 import { appState, getSelectedScan, patchState, subscribe } from "../state";
-import { filterRecords, type IndexRecord } from "../lib/db-index";
+import type { IndexRecord } from "../lib/db-index";
+import { collectKnownDatasetTags } from "../lib/dataset-tags";
+import { filterRecordsAdvanced, hasActiveRecordFilter, type RecordFilterState } from "../lib/record-filter";
 import {
   DEFAULT_BEZEICHNUNG_HINT,
   displayLocId,
@@ -16,6 +18,7 @@ import {
   serializeFieldInput,
 } from "../lib/meta-field-access";
 import { formatTableCell } from "../lib/table-schema";
+import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -157,13 +160,36 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   root.append(header);
 }
 
+function currentRecordFilter(): RecordFilterState {
+  return {
+    query: appState.filterQuery,
+    kategorie: appState.filterKategorie,
+    tagQuery: appState.filterTag,
+    tagMode: appState.filterTagMode,
+  };
+}
+
+function attachTagSuggestions(input: HTMLInputElement, listId: string): void {
+  const known = collectKnownDatasetTags(appState.scans);
+  if (!known.length) return;
+  const dl = el("datalist");
+  dl.id = listId;
+  for (const tag of known) {
+    const opt = el("option");
+    opt.value = tag;
+    dl.append(opt);
+  }
+  input.setAttribute("list", listId);
+  input.parentElement?.append(dl);
+}
+
 function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   const aside = el("aside", "sidebar");
   const search = el("input", "field");
   search.type = "search";
   search.name = "filterQuery";
   search.autocomplete = "off";
-  search.placeholder = "Suche (ID, Bezeichnung, Kategorie)";
+  search.placeholder = "Suche (ID, Bezeichnung, Kategorie, Tags)";
   search.value = appState.filterQuery;
   wirePlaceholderFocus(search);
   search.addEventListener("input", () => {
@@ -180,13 +206,53 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
     patchState({ filterKategorie: cat.value });
   });
 
-  const hasFilter = Boolean(appState.filterQuery.trim() || appState.filterKategorie.trim());
+  const tagModeWrap = el("label", "filter-tag-mode");
+  tagModeWrap.textContent = "Tag-Filter";
+  const tagMode = el("select", "field");
+  tagMode.name = "filterTagMode";
+  for (const [value, label] of [
+    ["off", "Nicht berücksichtigt"],
+    ["include", "Enthalten"],
+    ["exclude", "Nicht enthalten"],
+  ] as const) {
+    const opt = el("option");
+    opt.value = value;
+    opt.textContent = label;
+    tagMode.append(opt);
+  }
+  tagMode.value = appState.filterTagMode;
+  tagModeWrap.append(tagMode);
+
+  const tagInput = el("input", "field");
+  tagInput.name = "filterTag";
+  tagInput.autocomplete = "off";
+  tagInput.placeholder = "Tags (kommagetrennt)";
+  tagInput.value = appState.filterTag;
+  tagInput.disabled = appState.filterTagMode === "off";
+  wirePlaceholderFocus(tagInput);
+  tagInput.addEventListener("input", () => {
+    patchState({ filterTag: tagInput.value });
+  });
+  attachTagSuggestions(tagInput, "dataset-tag-suggestions-filter");
+
+  tagMode.addEventListener("change", () => {
+    const mode = tagMode.value as RecordFilterState["tagMode"];
+    tagInput.disabled = mode === "off";
+    patchState({ filterTagMode: mode });
+  });
+
+  const hasFilter = hasActiveRecordFilter(currentRecordFilter());
   const resetBtn = el("button", "btn");
   resetBtn.type = "button";
   resetBtn.textContent = "Filter zurücksetzen";
   resetBtn.disabled = !hasFilter;
   resetBtn.addEventListener("click", () => {
-    patchState({ filterQuery: "", filterKategorie: "" });
+    patchState({
+      filterQuery: "",
+      filterKategorie: "",
+      filterTag: "",
+      filterTagMode: "off",
+    });
   });
 
   const newBtn = el("button", "btn btn-primary");
@@ -195,7 +261,7 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   newBtn.disabled = !appState.ready;
   newBtn.addEventListener("click", () => void handlers.onNewDataset());
 
-  aside.append(search, cat, resetBtn, newBtn);
+  aside.append(search, cat, tagModeWrap, tagInput, resetBtn, newBtn);
   root.append(aside);
 }
 
@@ -217,7 +283,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   thead.append(headRow);
 
   const tbody = el("tbody");
-  const rows = filterRecords(appState.records, appState.filterQuery, appState.filterKategorie);
+  const rows = filterRecordsAdvanced(appState.records, currentRecordFilter());
   for (const row of rows) {
     const tr = el("tr", "data-row");
     tr.addEventListener("click", () => {
@@ -329,6 +395,19 @@ function renderSchemaFieldInput(
       void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, sel.value)),
     );
     wrap.append(sel);
+  } else if (def.dataType === "tags") {
+    const input = el("input", "field");
+    input.type = "text";
+    input.value = formatFieldForInput(def.dataType, value);
+    if (!input.value) {
+      input.placeholder = "Tags, kommagetrennt";
+      wirePlaceholderFocus(input);
+    }
+    attachTagSuggestions(input, `dataset-tag-suggestions-${def.key}`);
+    input.addEventListener("change", () =>
+      void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, input.value)),
+    );
+    wrap.append(input);
   } else {
     const input = el("input", "field");
     if (def.dataType === "number") input.type = "number";
@@ -381,6 +460,67 @@ function renderSchemaDetailForm(
     form.append(rowEl);
   }
   main.append(form);
+}
+
+function parseObsoleteFieldInput(raw: string): unknown {
+  const t = raw.trim();
+  if (!t) return "";
+  if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
+    try {
+      return JSON.parse(t) as unknown;
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
+function renderObsoleteFieldsSection(
+  parent: HTMLElement,
+  scan: { meta: import("../lib/meta-schema").DatasetMeta },
+  schema: DatasetSchemaDefinition,
+  handlers: ShellHandlers,
+): void {
+  const entries = listObsoleteFields(scan.meta, schema);
+  if (!entries.length) return;
+
+  const details = el("details", "obsolete-fields");
+  const summary = el("summary");
+  summary.textContent = `Nicht im Schema enthaltene Felder (${entries.length})`;
+  const body = el("div", "obsolete-fields-body");
+  const hint = el("p", "muted obsolete-hint");
+  hint.textContent =
+    "Diese Werte bleiben in meta.json erhalten. Schema-Änderungen (Umbenennung, Entfernen) löschen sie nicht.";
+  body.append(hint);
+
+  for (const entry of entries) {
+    const row = el("label");
+    row.className = "obsolete-field-row";
+    const keyLabel = el("span", "obsolete-field-key");
+    keyLabel.textContent = entry.key;
+    row.append(keyLabel);
+    const text = formatObsoleteValue(entry.value);
+    if (text.length > 80 || text.includes("\n")) {
+      const area = el("textarea", "field area obsolete-field-value");
+      area.value = text === "—" ? "" : text;
+      area.addEventListener("change", () => {
+        void handlers.onMetaFieldChange(entry.key, parseObsoleteFieldInput(area.value));
+      });
+      row.append(area);
+    } else {
+      const input = el("input", "field obsolete-field-value");
+      input.type = "text";
+      input.value = text === "—" ? "" : text;
+      input.addEventListener("change", () => {
+        void handlers.onMetaFieldChange(entry.key, parseObsoleteFieldInput(input.value));
+      });
+      row.append(input);
+    }
+    body.append(row);
+  }
+
+  details.append(summary, body);
+  parent.append(details);
 }
 
 function dateInputValue(iso: string | null | undefined): string {
@@ -477,7 +617,7 @@ function attachThumb(tile: HTMLElement, img: HTMLImageElement, path: string, han
 }
 
 function filteredDetailRows(): IndexRecord[] {
-  return filterRecords(appState.records, appState.filterQuery, appState.filterKategorie);
+  return filterRecordsAdvanced(appState.records, currentRecordFilter());
 }
 
 function navigateFilteredDetail(delta: number): void {
@@ -505,7 +645,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
 
   const rows = filteredDetailRows();
   const index = rows.findIndex((r) => r.locId === scan.meta.locId);
-  const hasFilter = Boolean(appState.filterQuery.trim() || appState.filterKategorie.trim());
+  const hasFilter = hasActiveRecordFilter(currentRecordFilter());
 
   const toolbar = el("div", "detail-toolbar");
   const back = el("button", "btn");
@@ -538,11 +678,31 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
     status.textContent = `Nicht in der Liste (${rows.length} Treffer${hasFilter ? ", Filter aktiv" : ""})`;
   }
 
-  toolbar.append(back, prev, status, next);
+  const delDs = el("button", "btn btn-danger detail-delete");
+  delDs.type = "button";
+  delDs.textContent = "Datensatz löschen…";
+  delDs.title = "Verschiebt den Ordner nach deleted/ (Strg+Z zum Zurückholen)";
+  delDs.disabled = !appState.ready;
+  delDs.addEventListener("click", () => {
+    const label = displayLocId(scan.meta.locId);
+    const bez = scan.meta.bezeichnung.trim();
+    const hint = bez ? `„${bez}“ (${label})` : label;
+    if (
+      !window.confirm(
+        `${hint} in den Ordner „deleted“ verschieben?\n\nStrg+Z / ⌘Z holt den Datensatz zurück.`,
+      )
+    ) {
+      return;
+    }
+    void handlers.onSoftDeleteDataset();
+  });
+
+  toolbar.append(back, prev, status, next, delDs);
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
   renderSchemaDetailForm(main, scan, schema, handlers);
+  renderObsoleteFieldsSection(main, scan, schema, handlers);
 
   const drop = el("div", "dropzone");
   drop.textContent = "PDF/Bilder hier ablegen";
@@ -682,17 +842,28 @@ export type ShellHandlers = {
   onDeleteFile: (relativePath: string) => Promise<void>;
   onFileMetaChange: (relativePath: string, patch: Partial<FileUserMeta>) => Promise<void>;
   onChangeDatasetId: (rawNewId: string) => Promise<void>;
+  onSoftDeleteDataset: () => Promise<void>;
+  onUndo: () => Promise<void>;
   getFileObjectUrl: (relativePath: string) => Promise<string>;
   onRerender: () => void;
 };
 
 function installDetailKeyboardNav(): void {
   const onKey = (e: KeyboardEvent) => {
-    if (appState.view !== "detail") return;
     const t = e.target;
-    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) {
+    const typing =
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLTextAreaElement ||
+      t instanceof HTMLSelectElement ||
+      (t instanceof HTMLElement && t.isContentEditable);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      if (typing) return;
+      e.preventDefault();
+      void handlersRef?.onUndo();
       return;
     }
+    if (appState.view !== "detail") return;
+    if (typing) return;
     if (e.key === "ArrowLeft" && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       navigateFilteredDetail(-1);
@@ -704,7 +875,10 @@ function installDetailKeyboardNav(): void {
   document.addEventListener("keydown", onKey);
 }
 
+let handlersRef: ShellHandlers | null = null;
+
 export function mountShell(container: HTMLElement, handlers: ShellHandlers): void {
+  handlersRef = handlers;
   installDetailKeyboardNav();
   const render = () => {
     const sidebarFocus = captureSidebarFocus();

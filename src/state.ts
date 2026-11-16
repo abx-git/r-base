@@ -1,4 +1,5 @@
 import type { IndexRecord, GlobalSyncMeta } from "./lib/db-index";
+import type { TagFilterMode } from "./lib/dataset-tags";
 import type { DatasetScan } from "./lib/fs-local";
 import type { SyncLogLine, SyncProgress } from "./lib/webdav-sync";
 
@@ -14,6 +15,8 @@ export type AppState = {
   scans: DatasetScan[];
   filterQuery: string;
   filterKategorie: string;
+  filterTag: string;
+  filterTagMode: TagFilterMode;
   view: AppView;
   selectedLocId: string | null;
   syncBusy: boolean;
@@ -36,6 +39,8 @@ export const appState: AppState = {
   scans: [],
   filterQuery: "",
   filterKategorie: "",
+  filterTag: "",
+  filterTagMode: "off",
   view: "table",
   selectedLocId: null,
   syncBusy: false,

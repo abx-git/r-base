@@ -6,6 +6,7 @@ Statische SPA für **lokale Datensätze** (File System Access API) mit **WebDAV-
 - Metadaten in `meta.json`, Suchindex in IndexedDB
 - Keine WebDAV-Passwörter im Repository (nur Sitzung)
 - **Einstellungen → Systemkonfiguration**: Schemata (Felder, Tabellenspalten, Detail-Layout mit Drag & Drop); Speicherung in `localStorage` pro Browser
+- Gelöschte Datensätze landen im Unterordner **`deleted/`** am Stamm (soft delete). **Strg+Z / ⌘Z** holt den letzten Verschiebevorgang zurück
 
 ## Entwicklung
 

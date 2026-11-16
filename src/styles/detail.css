@@ -13,10 +13,63 @@
   min-width: 8rem;
 }
 
+.detail-delete {
+  margin-left: auto;
+}
+
+.btn-danger {
+  border-color: color-mix(in srgb, var(--err, #b33) 55%, var(--line));
+  color: var(--err, #b33);
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--err, #b33) 12%, var(--control));
+}
+
 .detail-form {
   display: grid;
   gap: 0.55rem;
   max-width: 520px;
+}
+
+.obsolete-fields {
+  margin-top: 0.75rem;
+  max-width: 520px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  background: var(--control);
+}
+
+.obsolete-fields > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.obsolete-fields-body {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.obsolete-hint {
+  font-size: 0.78rem;
+  margin: 0 0 0.25rem;
+}
+
+.obsolete-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.obsolete-field-key {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .detail-form label {

@@ -25,7 +25,7 @@ export function formatTableCell(
   const v = getMetaFieldValue(meta, col.fieldKey);
   if (col.fieldKey === "locId") return displayLocId(String(v ?? meta.locId));
   if (v === null || v === undefined || v === "") return "—";
-  if (Array.isArray(v)) return v.join(", ");
+  if (Array.isArray(v)) return v.map(String).join(", ");
   if (typeof v === "boolean") return v ? "Ja" : "Nein";
   return String(v);
 }

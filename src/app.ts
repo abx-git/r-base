@@ -14,9 +14,12 @@ import {
   writeMetaToFolder,
   deleteFileFromDataset,
   renameDatasetLocId,
+  softDeleteDataset,
+  restoreSoftDeletedDataset,
   isImagePath,
   updateFileUserMeta,
 } from "./lib/fs-local";
+import { canUndo, popUndo, pushUndo } from "./lib/undo-stack";
 import {
   rebuildIndex,
   recordFromScan,
@@ -213,6 +216,50 @@ export function startApp(container: HTMLElement): void {
         message: "ID geändert.",
         error: "",
       });
+    },
+    onSoftDeleteDataset: async () => {
+      if (!appState.rootHandle) return;
+      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      if (!scan) return;
+      try {
+        const moved = await softDeleteDataset(appState.rootHandle, scan);
+        pushUndo({
+          type: "dataset-soft-delete",
+          locId: moved.locId,
+          folderNameInDeleted: moved.folderName,
+        });
+        await reloadFromDisk();
+        patchState({
+          view: "table",
+          selectedLocId: null,
+          message: "Datensatz nach „deleted“ verschoben. Strg+Z / ⌘Z zum Zurückholen.",
+          error: "",
+        });
+      } catch (e) {
+        patchState({ error: e instanceof Error ? e.message : String(e) });
+      }
+    },
+    onUndo: async () => {
+      if (!appState.rootHandle) return;
+      if (!canUndo()) {
+        patchState({ message: "Nichts zum Rückgängigmachen.", error: "" });
+        return;
+      }
+      const action = popUndo();
+      if (!action || action.type !== "dataset-soft-delete") return;
+      try {
+        const restored = await restoreSoftDeletedDataset(appState.rootHandle, action.folderNameInDeleted);
+        await reloadFromDisk();
+        patchState({
+          selectedLocId: restored.locId,
+          view: "detail",
+          message: "Löschen rückgängig gemacht.",
+          error: "",
+        });
+      } catch (e) {
+        pushUndo(action);
+        patchState({ error: e instanceof Error ? e.message : String(e) });
+      }
     },
     onRerender: () => patchState({}),
   });
