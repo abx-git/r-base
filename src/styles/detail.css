@@ -14,7 +14,55 @@
 }
 
 .detail-delete {
-  margin-left: auto;
+  margin-left: 0;
+}
+
+.hidden-schema-fields {
+  margin-top: 1rem;
+  max-width: 520px;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.hidden-fields-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+}
+
+.hidden-fields-body {
+  margin-top: 0.35rem;
+}
+
+.schema-field-row {
+  margin-bottom: 0.55rem;
+}
+
+.schema-field-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.schema-field-row-title {
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.schema-field-row-body label {
+  display: block;
+  width: 100%;
+}
+
+.btn-mini {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  flex-shrink: 0;
+}
+
+.schema-field-visibility-btn {
+  border-style: dashed;
 }
 
 .btn-danger {

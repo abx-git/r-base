@@ -1,6 +1,7 @@
 import type { DatasetSchemaDefinition } from "./dataset-schema-types";
 import type { DatasetMeta } from "./meta-schema";
 import { getMetaFieldValue } from "./meta-field-access";
+import { isHiddenFieldsMetaKey } from "./meta-hidden-fields";
 
 const CORE_KEYS = ["locId", "bezeichnung", "kategorie", "notes", "tags"] as const;
 
@@ -35,7 +36,7 @@ export function listObsoleteFields(meta: DatasetMeta, schema: DatasetSchemaDefin
   const active = schemaActiveFieldKeys(schema);
   const out: ObsoleteFieldEntry[] = [];
   for (const key of collectStoredFieldKeys(meta)) {
-    if (key === "locId" || active.has(key)) continue;
+    if (key === "locId" || active.has(key) || isHiddenFieldsMetaKey(key)) continue;
     const value = getMetaFieldValue(meta, key);
     if (!hasStoredValue(meta, key, value)) continue;
     out.push({ key, value });

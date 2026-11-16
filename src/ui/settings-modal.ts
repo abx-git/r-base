@@ -7,6 +7,8 @@ import {
 import { getLoxIdPrefix } from "../lib/id-config";
 import { propfind } from "../lib/webdav-client";
 import { openSystemConfigModal } from "./system-config-modal";
+import { loadSystemSchemaConfig } from "../lib/dataset-schema-store";
+import { persistCurrentProjectConfig } from "../lib/project-config";
 
 export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => void): void {
   const backdrop = document.createElement("div");
@@ -27,7 +29,7 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
     <label>Basis-URL <input class="field" name="baseUrl" type="url" placeholder="https://nas.example/webdav/r-base" /></label>
     <label>Benutzer <input class="field" name="username" autocomplete="username" /></label>
     <label>Passwort <input class="field" name="password" type="password" autocomplete="current-password" /></label>
-    <p class="muted">Passwort wird nicht im Repository gespeichert — nur in dieser Sitzung (RAM).</p>
+    <p class="muted">URL und Benutzer werden in <code>r-base.project.json</code> im Stammordner gespeichert. Das Passwort bleibt nur in dieser Sitzung (RAM).</p>
     <div class="modal-actions">
       <button type="button" class="btn" data-action="test">Verbindung testen</button>
       <button type="button" class="btn btn-primary" data-action="save">Speichern</button>
@@ -57,11 +59,19 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
   });
 
   dialog.querySelector('[data-action="save"]')?.addEventListener("click", () => {
-    setWebDavSettings({ baseUrl: baseUrl.value, username: username.value });
-    setWebDavPassword(password.value);
-    status.textContent = "Gespeichert.";
-    backdrop.remove();
-    onClose();
+    void (async () => {
+      setWebDavSettings({ baseUrl: baseUrl.value, username: username.value });
+      setWebDavPassword(password.value);
+      try {
+        await persistCurrentProjectConfig(loadSystemSchemaConfig(), getWebDavSettings());
+        status.textContent = "Gespeichert (inkl. r-base.project.json im Stammordner).";
+      } catch (e) {
+        status.textContent = e instanceof Error ? e.message : String(e);
+        return;
+      }
+      backdrop.remove();
+      onClose();
+    })();
   });
 
   dialog.querySelector('[data-action="test"]')?.addEventListener("click", async () => {

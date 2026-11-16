@@ -20,6 +20,11 @@ import {
 } from "../lib/meta-field-access";
 import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
+import {
+  getHiddenFieldKeySet,
+  isOptionalSchemaField,
+  orderedSchemaFieldKeys,
+} from "../lib/meta-hidden-fields";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -182,7 +187,7 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   search.type = "search";
   search.name = "filterQuery";
   search.autocomplete = "off";
-  search.placeholder = "Suche (ID, Bezeichnung, Kategorie, Tags)";
+  search.placeholder = "Suche in allen Feldern (ohne Tags)";
   search.value = appState.filterQuery;
   wirePlaceholderFocus(search);
   search.addEventListener("input", () => {
@@ -276,7 +281,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const metaById = new Map(appState.scans.map((s) => [s.meta.locId, s.meta]));
   const sort = appState.tableSort;
 
-  const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter());
+  const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter(), appState.scans);
   const rows = sortIndexRecords(filtered, sort, metaById);
   const visibleLocIds = rows.map((r) => r.locId);
   const selection = selectedTableIds();
@@ -461,18 +466,25 @@ function renderIdField(parent: HTMLElement, scan: { meta: { locId: string } }, h
   parent.append(locField);
 }
 
+type SchemaFieldLayoutCtx = {
+  layoutEdit: boolean;
+  inHiddenPanel: boolean;
+  onToggleHidden: (fieldKey: string, hidden: boolean) => void;
+};
+
 function renderSchemaFieldInput(
   parent: HTMLElement,
   def: SchemaFieldDef,
   scan: { meta: import("../lib/meta-schema").DatasetMeta },
   handlers: ShellHandlers,
+  options?: { omitLabel?: boolean },
 ): void {
   if (def.dataType === "locId") {
     renderIdField(parent, scan, handlers);
     return;
   }
   const wrap = el("label");
-  wrap.textContent = def.label;
+  if (!options?.omitLabel) wrap.textContent = def.label;
   const value = getMetaFieldValue(scan.meta, def.key);
   if (def.dataType === "text") {
     const area = el("textarea", "field area");
@@ -536,10 +548,45 @@ function renderSchemaFieldInput(
   parent.append(wrap);
 }
 
+function renderSchemaFieldBlock(
+  parent: HTMLElement,
+  def: SchemaFieldDef,
+  scan: { meta: import("../lib/meta-schema").DatasetMeta },
+  handlers: ShellHandlers,
+  layoutCtx?: SchemaFieldLayoutCtx,
+): void {
+  const useRowHead =
+    layoutCtx?.layoutEdit && isOptionalSchemaField(def) && layoutCtx.onToggleHidden;
+  if (!useRowHead) {
+    renderSchemaFieldInput(parent, def, scan, handlers);
+    return;
+  }
+  const row = el("div", "schema-field-row");
+  const head = el("div", "schema-field-row-head");
+  const title = el("span", "schema-field-row-title");
+  title.textContent = def.label;
+  const btn = el("button", "btn btn-mini schema-field-visibility-btn");
+  btn.type = "button";
+  btn.textContent = layoutCtx!.inHiddenPanel ? "Einblenden" : "Ausblenden";
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    layoutCtx!.onToggleHidden(def.key, !layoutCtx!.inHiddenPanel);
+  });
+  head.append(title, btn);
+  row.append(head);
+  const body = el("div", "schema-field-row-body");
+  renderSchemaFieldInput(body, def, scan, handlers, { omitLabel: true });
+  row.append(body);
+  parent.append(row);
+}
+
 type SchemaDetailFormOptions = {
   /** Nach diesem Layout-Container (z. B. Metadaten) Dateien einfügen. */
   filesInsertAfterContainerId?: string;
   renderFiles?: (parent: HTMLElement) => void;
+  hiddenFieldKeys?: Set<string>;
+  layoutEdit?: boolean;
+  onToggleFieldHidden?: (fieldKey: string, hidden: boolean) => void;
 };
 
 function appendSchemaFormChunk(main: HTMLElement): HTMLDivElement {
@@ -558,6 +605,15 @@ function renderSchemaDetailForm(
   const layout = schema.layout.length ? schema.layout : getDefaultSchema().layout;
   let form = appendSchemaFormChunk(main);
   let filesInserted = false;
+  const hiddenKeys = options?.hiddenFieldKeys ?? new Set<string>();
+  const layoutCtx: SchemaFieldLayoutCtx | undefined =
+    options?.layoutEdit && options.onToggleFieldHidden
+      ? {
+          layoutEdit: true,
+          inHiddenPanel: false,
+          onToggleHidden: options.onToggleFieldHidden,
+        }
+      : undefined;
 
   for (const row of layout) {
     let rowEl = el("div", "schema-form-row");
@@ -575,7 +631,8 @@ function renderSchemaDetailForm(
       for (const key of keys) {
         const def = fieldDefByKey(schema.fields, key);
         if (!def) continue;
-        renderSchemaFieldInput(box, def, scan, handlers);
+        if (hiddenKeys.has(key)) continue;
+        renderSchemaFieldBlock(box, def, scan, handlers, layoutCtx);
       }
       rowEl.append(box);
 
@@ -595,6 +652,44 @@ function renderSchemaDetailForm(
   }
 
   if (options?.renderFiles && !filesInserted) options.renderFiles(main);
+}
+
+function renderHiddenSchemaFieldsSection(
+  parent: HTMLElement,
+  scan: { meta: import("../lib/meta-schema").DatasetMeta },
+  schema: DatasetSchemaDefinition,
+  handlers: ShellHandlers,
+  hiddenKeys: Set<string>,
+): void {
+  const defs = orderedSchemaFieldKeys(schema)
+    .map((k) => fieldDefByKey(schema.fields, k))
+    .filter((d): d is SchemaFieldDef => Boolean(d))
+    .filter((d) => hiddenKeys.has(d.key) && isOptionalSchemaField(d));
+  if (!defs.length) return;
+
+  const section = el("section", "hidden-schema-fields");
+  const title = el("h3", "schema-container-title");
+  title.textContent = `Ausgeblendete Felder (${defs.length})`;
+  const hint = el("p", "muted hidden-fields-hint");
+  hint.textContent = appState.detailLayoutEdit
+    ? "Mit „Einblenden“ erscheinen die Felder wieder in der Hauptansicht oben."
+    : "„Layout bearbeiten“ aktivieren, um Felder wieder einzublenden.";
+  section.append(title, hint);
+
+  const box = el("div", "schema-form-container hidden-fields-body");
+  const ctx: SchemaFieldLayoutCtx | undefined = appState.detailLayoutEdit
+    ? {
+        layoutEdit: true,
+        inHiddenPanel: true,
+        onToggleHidden: (fieldKey, hidden) => void handlers.onSetFieldHidden(fieldKey, hidden),
+      }
+    : undefined;
+
+  for (const def of defs) {
+    renderSchemaFieldBlock(box, def, scan, handlers, ctx);
+  }
+  section.append(box);
+  parent.append(section);
 }
 
 function parseObsoleteFieldInput(raw: string): unknown {
@@ -752,7 +847,7 @@ function attachThumb(tile: HTMLElement, img: HTMLImageElement, path: string, han
 }
 
 function filteredDetailRows(): IndexRecord[] {
-  return filterRecordsAdvanced(appState.records, currentRecordFilter());
+  return filterRecordsAdvanced(appState.records, currentRecordFilter(), appState.scans);
 }
 
 function navigateFilteredDetail(delta: number): void {
@@ -928,14 +1023,29 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
     void handlers.onSoftDeleteDataset();
   });
 
-  toolbar.append(back, prev, status, next, delDs);
+  const layoutEditBtn = el("button", "btn");
+  layoutEditBtn.type = "button";
+  layoutEditBtn.textContent = appState.detailLayoutEdit ? "Layout: Fertig" : "Layout bearbeiten";
+  layoutEditBtn.classList.toggle("btn-primary", appState.detailLayoutEdit);
+  layoutEditBtn.title = "Optionale Felder für diesen Datensatz aus- oder einblenden";
+  layoutEditBtn.addEventListener("click", () => {
+    patchState({ detailLayoutEdit: !appState.detailLayoutEdit });
+    handlers.onRerender();
+  });
+
+  toolbar.append(back, prev, status, next, layoutEditBtn, delDs);
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
+  const hiddenKeys = getHiddenFieldKeySet(scan.meta, schema);
   renderSchemaDetailForm(main, scan, schema, handlers, {
     filesInsertAfterContainerId: "container-meta",
     renderFiles: (parent) => renderDatasetFilesSection(parent, scan, handlers),
+    hiddenFieldKeys: hiddenKeys,
+    layoutEdit: appState.detailLayoutEdit,
+    onToggleFieldHidden: (fieldKey, hidden) => void handlers.onSetFieldHidden(fieldKey, hidden),
   });
+  renderHiddenSchemaFieldsSection(main, scan, schema, handlers, hiddenKeys);
   renderObsoleteFieldsSection(main, scan, schema, handlers);
 
   const preview = el("div", "preview-pane");
@@ -994,6 +1104,7 @@ export type ShellHandlers = {
   onSoftDeleteDataset: () => Promise<void>;
   onBulkSoftDelete: (locIds: string[]) => Promise<void>;
   onBulkAssignTag: (locIds: string[], tag: string) => Promise<void>;
+  onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
   onUndo: () => Promise<void>;
   getFileObjectUrl: (relativePath: string) => Promise<string>;
   onRerender: () => void;

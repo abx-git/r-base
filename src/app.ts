@@ -35,9 +35,40 @@ import { importJuraCsvFile } from "./lib/jura-csv-import";
 import { readFileAtPath } from "./lib/workspace";
 import { setMetaFieldValue } from "./lib/meta-field-access";
 import { normalizeDatasetTags } from "./lib/dataset-tags";
+import {
+  getDefaultSchema,
+  installSystemSchemaConfig,
+  loadSystemSchemaConfig,
+  resolveSchemaForDataset,
+} from "./lib/dataset-schema-store";
+import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
+import {
+  bindProjectRoot,
+  readProjectConfigFromRoot,
+  writeProjectConfigToRoot,
+  type ProjectConfigFile,
+} from "./lib/project-config";
+import { getWebDavSettings, setWebDavSettings } from "./lib/credentials";
+
+async function applyProjectConfigFromRoot(root: FileSystemDirectoryHandle): Promise<void> {
+  bindProjectRoot(root);
+  let file = await readProjectConfigFromRoot(root);
+  if (!file) {
+    const bootstrap: ProjectConfigFile = {
+      configVersion: 1,
+      schemas: loadSystemSchemaConfig(),
+      settings: { webdav: getWebDavSettings() },
+    };
+    await writeProjectConfigToRoot(root, bootstrap);
+    file = bootstrap;
+  }
+  installSystemSchemaConfig(file.schemas);
+  setWebDavSettings(file.settings?.webdav ?? { baseUrl: "", username: "" });
+}
 
 async function reloadFromDisk(): Promise<void> {
   if (!appState.rootHandle) return;
+  await applyProjectConfigFromRoot(appState.rootHandle);
   const scans = await scanAllDatasets(appState.rootHandle);
   const records = scans.map((s) => recordFromScan(s, syncStatusAfterLocalEdit()));
   await rebuildIndex(records);
@@ -306,6 +337,22 @@ export function startApp(container: HTMLElement): void {
         message: `${ok} Datensätze nach „deleted“ verschoben. Strg+Z / ⌘Z je einen zurück.`,
         error: errors.length ? errors.slice(0, 6).join(" · ") : "",
       });
+    },
+    onSetFieldHidden: async (fieldKey, hidden) => {
+      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      if (!scan) return;
+      const schema = resolveSchemaForDataset(scan.meta) ?? getDefaultSchema();
+      setSchemaFieldHidden(scan.meta, schema, fieldKey, hidden);
+      try {
+        await writeMetaToFolder(scan.handle, scan.meta);
+        await reloadFromDisk();
+        patchState({
+          message: hidden ? `Feld „${fieldKey}“ ausgeblendet.` : `Feld „${fieldKey}“ eingeblendet.`,
+          error: "",
+        });
+      } catch (e) {
+        patchState({ error: e instanceof Error ? e.message : String(e) });
+      }
     },
     onBulkAssignTag: async (locIds, rawTag) => {
       if (!appState.rootHandle || !locIds.length) return;

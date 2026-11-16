@@ -89,7 +89,7 @@ export function openSystemConfigModal(onChanged: () => void): void {
 
   dialog.innerHTML = `
     <h2>Systemkonfiguration</h2>
-    <p class="muted">Schemata legen Felder, Validierung, Detail-Layout und Tabellenspalten fest. Gespeichert im Browser (localStorage), nicht im Git-Repository.</p>
+    <p class="muted">Schemata legen Felder, Validierung, Detail-Layout und Tabellenspalten fest. Gespeichert in <code>r-base.project.json</code> im Stammordner.</p>
     <div class="schema-list" data-list></div>
     <div class="modal-actions">
       <button type="button" class="btn" data-action="reset">Auf Werkszustand</button>

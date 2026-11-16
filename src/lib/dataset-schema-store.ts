@@ -5,10 +5,14 @@ import {
   createDefaultSystemSchemaConfig,
 } from "./dataset-schema-defaults";
 import { mergeJuraFieldsIntoBuiltinSchema } from "./jura-csv-schema";
+import { getBoundProjectRoot, persistCurrentProjectConfig } from "./project-config";
+import { getWebDavSettings } from "./credentials";
 
 const STORAGE_KEY = "r-base.system-schemas";
 
-export function loadSystemSchemaConfig(): SystemSchemaConfig {
+let activeConfig: SystemSchemaConfig | null = null;
+
+function loadConfigFromLocalStorage(): SystemSchemaConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return createDefaultSystemSchemaConfig();
@@ -20,6 +24,26 @@ export function loadSystemSchemaConfig(): SystemSchemaConfig {
   } catch {
     return createDefaultSystemSchemaConfig();
   }
+}
+
+export function loadSystemSchemaConfig(): SystemSchemaConfig {
+  if (activeConfig) return activeConfig;
+  return loadConfigFromLocalStorage();
+}
+
+/** Beim Öffnen des Stammordners: Projektdatei → aktive Schema-Konfiguration. */
+export function installSystemSchemaConfig(config: SystemSchemaConfig): SystemSchemaConfig {
+  const normalized = normalizeConfig(mergeWithBuiltin(config));
+  activeConfig = normalized;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+  }
+  return normalized;
+}
+
+export function clearActiveSchemaConfig(): void {
+  activeConfig = null;
 }
 
 function mergeWithBuiltin(config: SystemSchemaConfig): SystemSchemaConfig {
@@ -78,7 +102,16 @@ function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefiniti
 }
 
 export function saveSystemSchemaConfig(config: SystemSchemaConfig): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeConfig(config)));
+  const normalized = normalizeConfig(config);
+  activeConfig = normalized;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+  }
+  if (getBoundProjectRoot()) {
+    void persistCurrentProjectConfig(normalized, getWebDavSettings()).catch(() => {
+    });
+  }
 }
 
 export function getDefaultSchema(): DatasetSchemaDefinition {
@@ -146,7 +179,7 @@ export function setDefaultSchemaId(id: string): void {
 }
 
 export function resetSchemasToDefaults(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  saveSystemSchemaConfig(createDefaultSystemSchemaConfig());
 }
 
 export function loxPrefixFromDefaultSchema(): string {
