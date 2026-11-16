@@ -40,7 +40,9 @@ import {
   installSystemSchemaConfig,
   loadSystemSchemaConfig,
   resolveSchemaForDataset,
+  upsertSchemaDefinition,
 } from "./lib/dataset-schema-store";
+import { applyTableColumnHidden } from "./lib/table-layout";
 import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
 import {
   bindProjectRoot,
@@ -337,6 +339,21 @@ export function startApp(container: HTMLElement): void {
         message: `${ok} Datensätze nach „deleted“ verschoben. Strg+Z / ⌘Z je einen zurück.`,
         error: errors.length ? errors.slice(0, 6).join(" · ") : "",
       });
+    },
+    onSetTableColumnHidden: async (columnId, hidden) => {
+      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
+      const schema = scan ? resolveSchemaForDataset(scan.meta) : getDefaultSchema();
+      const next = applyTableColumnHidden(schema, columnId, hidden);
+      upsertSchemaDefinition(next);
+      try {
+        await reloadFromDisk();
+        patchState({
+          message: hidden ? "Tabellenspalte ausgeblendet." : "Tabellenspalte eingeblendet.",
+          error: "",
+        });
+      } catch (e) {
+        patchState({ error: e instanceof Error ? e.message : String(e) });
+      }
     },
     onSetFieldHidden: async (fieldKey, hidden) => {
       const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);

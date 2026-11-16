@@ -62,6 +62,8 @@ export type DatasetSchemaDefinition = {
   fields: SchemaFieldDef[];
   layout: LayoutRow[];
   tableColumns: TableColumnDef[];
+  /** Tabellenspalten-IDs (source:fieldKey), in der Liste ausgeblendet */
+  hiddenTableColumnKeys?: string[];
   /** Mitgeliefert, nicht löschbar */
   builtin?: boolean;
 };

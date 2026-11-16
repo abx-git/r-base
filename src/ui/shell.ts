@@ -25,6 +25,11 @@ import {
   isOptionalSchemaField,
   orderedSchemaFieldKeys,
 } from "../lib/meta-hidden-fields";
+import {
+  getHiddenTableColumnIdSet,
+  tableColumnId,
+  visibleTableColumns,
+} from "../lib/table-layout";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -277,7 +282,7 @@ function renderTableTagsCell(td: HTMLElement, tags: string[], maxVisible = 4): v
 
 function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const listSchema = getDefaultSchema();
-  const columns = listSchema.tableColumns.length ? listSchema.tableColumns : getDefaultSchema().tableColumns;
+  const columns = visibleTableColumns(listSchema);
   const metaById = new Map(appState.scans.map((s) => [s.meta.locId, s.meta]));
   const sort = appState.tableSort;
 
@@ -661,6 +666,8 @@ function renderHiddenSchemaFieldsSection(
   handlers: ShellHandlers,
   hiddenKeys: Set<string>,
 ): void {
+  if (!appState.detailLayoutEdit) return;
+
   const defs = orderedSchemaFieldKeys(schema)
     .map((k) => fieldDefByKey(schema.fields, k))
     .filter((d): d is SchemaFieldDef => Boolean(d))
@@ -669,26 +676,62 @@ function renderHiddenSchemaFieldsSection(
 
   const section = el("section", "hidden-schema-fields");
   const title = el("h3", "schema-container-title");
-  title.textContent = `Ausgeblendete Felder (${defs.length})`;
+  title.textContent = `Ausgeblendete Detailfelder (${defs.length})`;
   const hint = el("p", "muted hidden-fields-hint");
-  hint.textContent = appState.detailLayoutEdit
-    ? "Mit „Einblenden“ erscheinen die Felder wieder in der Hauptansicht oben."
-    : "„Layout bearbeiten“ aktivieren, um Felder wieder einzublenden.";
+  hint.textContent =
+    "Diese Felder sind in der Hauptansicht nicht sichtbar. „Einblenden“ stellt sie wieder her.";
   section.append(title, hint);
 
-  const box = el("div", "schema-form-container hidden-fields-body");
-  const ctx: SchemaFieldLayoutCtx | undefined = appState.detailLayoutEdit
-    ? {
-        layoutEdit: true,
-        inHiddenPanel: true,
-        onToggleHidden: (fieldKey, hidden) => void handlers.onSetFieldHidden(fieldKey, hidden),
-      }
-    : undefined;
-
+  const list = el("ul", "hidden-field-reveal-list");
   for (const def of defs) {
-    renderSchemaFieldBlock(box, def, scan, handlers, ctx);
+    const li = el("li", "hidden-field-reveal-item");
+    const label = el("span", "hidden-field-reveal-label");
+    label.textContent = def.label;
+    const btn = el("button", "btn btn-mini");
+    btn.type = "button";
+    btn.textContent = "Einblenden";
+    btn.addEventListener("click", () => void handlers.onSetFieldHidden(def.key, false));
+    li.append(label, btn);
+    list.append(li);
   }
-  section.append(box);
+  section.append(list);
+  parent.append(section);
+}
+
+function renderTableColumnsLayoutSection(
+  parent: HTMLElement,
+  schema: DatasetSchemaDefinition,
+  handlers: ShellHandlers,
+): void {
+  if (!appState.detailLayoutEdit) return;
+
+  const columns = schema.tableColumns.length ? schema.tableColumns : [];
+  if (!columns.length) return;
+
+  const hiddenCols = getHiddenTableColumnIdSet(schema);
+  const section = el("section", "table-columns-layout");
+  const title = el("h3", "schema-container-title");
+  title.textContent = "Tabellenspalten (Projekt)";
+  const hint = el("p", "muted hidden-fields-hint");
+  hint.textContent =
+    "Gilt für die gesamte Tabelle. Ausgeblendete Spalten erscheinen dort nicht — hier nur ein- oder ausblenden.";
+  section.append(title, hint);
+
+  const list = el("ul", "hidden-field-reveal-list");
+  for (const col of columns) {
+    const id = tableColumnId(col);
+    const isHidden = hiddenCols.has(id);
+    const li = el("li", "hidden-field-reveal-item");
+    const label = el("span", "hidden-field-reveal-label");
+    label.textContent = col.label;
+    const btn = el("button", "btn btn-mini schema-field-visibility-btn");
+    btn.type = "button";
+    btn.textContent = isHidden ? "Einblenden" : "Ausblenden";
+    btn.addEventListener("click", () => void handlers.onSetTableColumnHidden(id, !isHidden));
+    li.append(label, btn);
+    list.append(li);
+  }
+  section.append(list);
   parent.append(section);
 }
 
@@ -1027,7 +1070,8 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   layoutEditBtn.type = "button";
   layoutEditBtn.textContent = appState.detailLayoutEdit ? "Layout: Fertig" : "Layout bearbeiten";
   layoutEditBtn.classList.toggle("btn-primary", appState.detailLayoutEdit);
-  layoutEditBtn.title = "Optionale Felder für diesen Datensatz aus- oder einblenden";
+  layoutEditBtn.title =
+    "Detailfelder (Datensatz) und Tabellenspalten (Projekt) ein- oder ausblenden";
   layoutEditBtn.addEventListener("click", () => {
     patchState({ detailLayoutEdit: !appState.detailLayoutEdit });
     handlers.onRerender();
@@ -1045,6 +1089,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
     layoutEdit: appState.detailLayoutEdit,
     onToggleFieldHidden: (fieldKey, hidden) => void handlers.onSetFieldHidden(fieldKey, hidden),
   });
+  renderTableColumnsLayoutSection(main, schema, handlers);
   renderHiddenSchemaFieldsSection(main, scan, schema, handlers, hiddenKeys);
   renderObsoleteFieldsSection(main, scan, schema, handlers);
 
@@ -1105,6 +1150,7 @@ export type ShellHandlers = {
   onBulkSoftDelete: (locIds: string[]) => Promise<void>;
   onBulkAssignTag: (locIds: string[], tag: string) => Promise<void>;
   onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
+  onSetTableColumnHidden: (columnId: string, hidden: boolean) => Promise<void>;
   onUndo: () => Promise<void>;
   getFileObjectUrl: (relativePath: string) => Promise<string>;
   onRerender: () => void;
