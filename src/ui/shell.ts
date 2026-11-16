@@ -1,5 +1,5 @@
 import { appState, getSelectedScan, patchState, subscribe } from "../state";
-import { filterRecords } from "../lib/db-index";
+import { filterRecords, type IndexRecord } from "../lib/db-index";
 import {
   DEFAULT_BEZEICHNUNG_HINT,
   displayLocId,
@@ -476,6 +476,24 @@ function attachThumb(tile: HTMLElement, img: HTMLImageElement, path: string, han
   tile.addEventListener("mouseleave", () => hover.classList.remove("is-visible"));
 }
 
+function filteredDetailRows(): IndexRecord[] {
+  return filterRecords(appState.records, appState.filterQuery, appState.filterKategorie);
+}
+
+function navigateFilteredDetail(delta: number): void {
+  const rows = filteredDetailRows();
+  if (!rows.length) return;
+  const selected = appState.selectedLocId;
+  let index = selected ? rows.findIndex((r) => r.locId === selected) : -1;
+  if (index < 0) {
+    index = delta > 0 ? -1 : rows.length;
+  }
+  const nextIndex = (index + delta + rows.length) % rows.length;
+  const next = rows[nextIndex];
+  if (!next || next.locId === selected) return;
+  patchState({ selectedLocId: next.locId, view: "detail" });
+}
+
 function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   const scan = getSelectedScan();
   if (!scan) {
@@ -485,15 +503,42 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
 
   clearPreview();
 
+  const rows = filteredDetailRows();
+  const index = rows.findIndex((r) => r.locId === scan.meta.locId);
+  const hasFilter = Boolean(appState.filterQuery.trim() || appState.filterKategorie.trim());
+
   const toolbar = el("div", "detail-toolbar");
   const back = el("button", "btn");
   back.type = "button";
   back.textContent = "← Tabelle";
   back.addEventListener("click", () => {
     patchState({ view: "table" });
-    handlers.onRerender();
   });
-  toolbar.append(back);
+
+  const prev = el("button", "btn");
+  prev.type = "button";
+  prev.textContent = "◀ Vorheriger";
+  prev.disabled = rows.length <= 1;
+  prev.title = hasFilter ? "Vorheriger Datensatz (aktuelle Suche/Filter)" : "Vorheriger Datensatz";
+  prev.addEventListener("click", () => navigateFilteredDetail(-1));
+
+  const next = el("button", "btn");
+  next.type = "button";
+  next.textContent = "Nächster ▶";
+  next.disabled = rows.length <= 1;
+  next.title = hasFilter ? "Nächster Datensatz (aktuelle Suche/Filter)" : "Nächster Datensatz";
+  next.addEventListener("click", () => navigateFilteredDetail(1));
+
+  const status = el("span", "detail-nav-status muted");
+  if (!rows.length) {
+    status.textContent = "Keine Treffer für aktuelle Filter";
+  } else if (index >= 0) {
+    status.textContent = `${index + 1} / ${rows.length}${hasFilter ? " (Filter)" : ""}`;
+  } else {
+    status.textContent = `Nicht in der Liste (${rows.length} Treffer${hasFilter ? ", Filter aktiv" : ""})`;
+  }
+
+  toolbar.append(back, prev, status, next);
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
@@ -641,7 +686,26 @@ export type ShellHandlers = {
   onRerender: () => void;
 };
 
+function installDetailKeyboardNav(): void {
+  const onKey = (e: KeyboardEvent) => {
+    if (appState.view !== "detail") return;
+    const t = e.target;
+    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) {
+      return;
+    }
+    if (e.key === "ArrowLeft" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      navigateFilteredDetail(-1);
+    } else if (e.key === "ArrowRight" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      navigateFilteredDetail(1);
+    }
+  };
+  document.addEventListener("keydown", onKey);
+}
+
 export function mountShell(container: HTMLElement, handlers: ShellHandlers): void {
+  installDetailKeyboardNav();
   const render = () => {
     const sidebarFocus = captureSidebarFocus();
     container.replaceChildren();
