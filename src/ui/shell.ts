@@ -209,6 +209,7 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
       filterQuery: "",
       filterKategorie: "",
       filterTagRules: [],
+      tableSelection: [],
     });
   });
 
@@ -222,6 +223,26 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   renderSidebarTagFilter(aside);
   aside.append(resetBtn, newBtn);
   root.append(aside);
+}
+
+function selectedTableIds(): Set<string> {
+  return new Set(appState.tableSelection);
+}
+
+function toggleTableRowSelection(locId: string): void {
+  const sel = selectedTableIds();
+  if (sel.has(locId)) sel.delete(locId);
+  else sel.add(locId);
+  patchState({ tableSelection: [...sel] });
+}
+
+function setTableSelectionForVisible(locIds: string[], selected: boolean): void {
+  const sel = selectedTableIds();
+  for (const id of locIds) {
+    if (selected) sel.add(id);
+    else sel.delete(id);
+  }
+  patchState({ tableSelection: [...sel] });
 }
 
 function renderTableTagsCell(td: HTMLElement, tags: string[], maxVisible = 4): void {
@@ -255,10 +276,75 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const metaById = new Map(appState.scans.map((s) => [s.meta.locId, s.meta]));
   const sort = appState.tableSort;
 
+  const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter());
+  const rows = sortIndexRecords(filtered, sort, metaById);
+  const visibleLocIds = rows.map((r) => r.locId);
+  const selection = selectedTableIds();
+  const selectedVisible = visibleLocIds.filter((id) => selection.has(id));
+  const allVisibleSelected = visibleLocIds.length > 0 && selectedVisible.length === visibleLocIds.length;
+
+  const bulkBar = el("div", "table-bulk-bar");
+  const bulkCount = el("span", "table-bulk-count");
+  bulkCount.textContent =
+    selectedVisible.length > 0
+      ? `${selectedVisible.length} ausgewählt`
+      : "Keine Auswahl";
+  const bulkDelete = el("button", "btn btn-danger");
+  bulkDelete.type = "button";
+  bulkDelete.textContent = "Löschen…";
+  bulkDelete.disabled = selectedVisible.length === 0 || !appState.ready;
+  bulkDelete.title = "Ausgewählte nach deleted/ verschieben (Strg+Z je Datensatz)";
+  bulkDelete.addEventListener("click", () => {
+    if (!selectedVisible.length) return;
+    if (
+      !window.confirm(
+        `${selectedVisible.length} Datensätze nach „deleted“ verschieben?\n\nStrg+Z / ⌘Z holt jeweils den zuletzt gelöschten zurück.`,
+      )
+    ) {
+      return;
+    }
+    void handlers.onBulkSoftDelete(selectedVisible).then(() => handlers.onRerender());
+  });
+  const bulkTag = el("button", "btn");
+  bulkTag.type = "button";
+  bulkTag.textContent = "Tag zuweisen…";
+  bulkTag.disabled = selectedVisible.length === 0 || !appState.ready;
+  bulkTag.addEventListener("click", () => {
+    if (!selectedVisible.length) return;
+    const raw = window.prompt(`Tag für ${selectedVisible.length} Datensätze:`, "");
+    if (raw === null) return;
+    const tag = raw.trim();
+    if (!tag) return;
+    void handlers.onBulkAssignTag(selectedVisible, tag).then(() => handlers.onRerender());
+  });
+  const bulkClear = el("button", "btn");
+  bulkClear.type = "button";
+  bulkClear.textContent = "Auswahl aufheben";
+  bulkClear.disabled = selectedVisible.length === 0;
+  bulkClear.addEventListener("click", () => {
+    patchState({ tableSelection: [] });
+    handlers.onRerender();
+  });
+  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear);
+
   const tableWrap = el("div", "table-wrap");
   const table = el("table", "data-table data-table--compact");
   const thead = el("thead");
   const headRow = el("tr");
+  const thSel = el("th", "data-table-th-select");
+  const headCheck = el("input");
+  headCheck.type = "checkbox";
+  headCheck.className = "table-row-check";
+  headCheck.checked = allVisibleSelected;
+  headCheck.indeterminate = selectedVisible.length > 0 && !allVisibleSelected;
+  headCheck.title = "Alle sichtbaren Zeilen auswählen";
+  headCheck.addEventListener("click", (e) => e.stopPropagation());
+  headCheck.addEventListener("change", () => {
+    setTableSelectionForVisible(visibleLocIds, headCheck.checked);
+    handlers.onRerender();
+  });
+  thSel.append(headCheck);
+  headRow.append(thSel);
   for (const col of columns) {
     const th = el("th", "data-table-th");
     const label = el("span", "data-table-th-label");
@@ -284,14 +370,27 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   thead.append(headRow);
 
   const tbody = el("tbody");
-  const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter());
-  const rows = sortIndexRecords(filtered, sort, metaById);
   for (const row of rows) {
-    const tr = el("tr", "data-row");
+    const isSelected = selection.has(row.locId);
+    const tr = el("tr", isSelected ? "data-row data-row--selected" : "data-row");
     tr.addEventListener("click", () => {
       patchState({ selectedLocId: row.locId, view: "detail" });
       handlers.onRerender();
     });
+    const tdSel = el("td", "table-cell-select");
+    const rowCheck = el("input");
+    rowCheck.type = "checkbox";
+    rowCheck.className = "table-row-check";
+    rowCheck.checked = isSelected;
+    rowCheck.title = "Zeile auswählen";
+    rowCheck.addEventListener("click", (e) => e.stopPropagation());
+    rowCheck.addEventListener("change", (e) => {
+      e.stopPropagation();
+      toggleTableRowSelection(row.locId);
+      handlers.onRerender();
+    });
+    tdSel.append(rowCheck);
+    tr.append(tdSel);
     const meta = metaById.get(row.locId);
     for (const col of columns) {
       const td = el("td");
@@ -323,7 +422,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   backHint.textContent = rows.length
     ? `${rows.length} Datensätze${sortHint}`
     : "Keine Datensätze — neu anlegen oder Ordner wählen.";
-  main.append(backHint, tableWrap);
+  main.append(backHint, bulkBar, tableWrap);
 }
 
 function beginIdChange(scan: { meta: { locId: string } }, handlers: ShellHandlers): void {
@@ -893,6 +992,8 @@ export type ShellHandlers = {
   onFileMetaChange: (relativePath: string, patch: Partial<FileUserMeta>) => Promise<void>;
   onChangeDatasetId: (rawNewId: string) => Promise<void>;
   onSoftDeleteDataset: () => Promise<void>;
+  onBulkSoftDelete: (locIds: string[]) => Promise<void>;
+  onBulkAssignTag: (locIds: string[], tag: string) => Promise<void>;
   onUndo: () => Promise<void>;
   getFileObjectUrl: (relativePath: string) => Promise<string>;
   onRerender: () => void;

@@ -34,6 +34,7 @@ import { downloadBlob, exportMetadataXlsx, importMetadataXlsx } from "./lib/exce
 import { importJuraCsvFile } from "./lib/jura-csv-import";
 import { readFileAtPath } from "./lib/workspace";
 import { setMetaFieldValue } from "./lib/meta-field-access";
+import { normalizeDatasetTags } from "./lib/dataset-tags";
 
 async function reloadFromDisk(): Promise<void> {
   if (!appState.rootHandle) return;
@@ -269,6 +270,70 @@ export function startApp(container: HTMLElement): void {
       } catch (e) {
         patchState({ error: e instanceof Error ? e.message : String(e) });
       }
+    },
+    onBulkSoftDelete: async (locIds) => {
+      if (!appState.rootHandle || !locIds.length) return;
+      const errors: string[] = [];
+      let ok = 0;
+      const deletedIds = new Set<string>();
+      for (const locId of locIds) {
+        const scan = appState.scans.find((s) => s.meta.locId === locId);
+        if (!scan) continue;
+        try {
+          const moved = await softDeleteDataset(appState.rootHandle, scan);
+          pushUndo({
+            type: "dataset-soft-delete",
+            locId: moved.locId,
+            folderNameInDeleted: moved.folderName,
+          });
+          deletedIds.add(locId);
+          ok++;
+        } catch (e) {
+          errors.push(`${locId}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      if (!ok) {
+        patchState({ error: errors.slice(0, 6).join(" · ") || "Löschen fehlgeschlagen." });
+        return;
+      }
+      await reloadFromDisk();
+      const remainingSel = appState.tableSelection.filter((id) => !deletedIds.has(id));
+      patchState({
+        tableSelection: remainingSel,
+        selectedLocId:
+          appState.selectedLocId && deletedIds.has(appState.selectedLocId) ? null : appState.selectedLocId,
+        view: "table",
+        message: `${ok} Datensätze nach „deleted“ verschoben. Strg+Z / ⌘Z je einen zurück.`,
+        error: errors.length ? errors.slice(0, 6).join(" · ") : "",
+      });
+    },
+    onBulkAssignTag: async (locIds, rawTag) => {
+      if (!appState.rootHandle || !locIds.length) return;
+      const tags = normalizeDatasetTags([rawTag]);
+      const tag = tags[0];
+      if (!tag) return;
+      const errors: string[] = [];
+      let ok = 0;
+      for (const locId of locIds) {
+        const scan = appState.scans.find((s) => s.meta.locId === locId);
+        if (!scan) continue;
+        try {
+          scan.meta.tags = normalizeDatasetTags([...(scan.meta.tags ?? []), tag]);
+          await writeMetaToFolder(scan.handle, scan.meta);
+          ok++;
+        } catch (e) {
+          errors.push(`${locId}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      if (!ok) {
+        patchState({ error: errors.slice(0, 6).join(" · ") || "Tag zuweisen fehlgeschlagen." });
+        return;
+      }
+      await reloadFromDisk();
+      patchState({
+        message: `Tag „${tag}" ${ok} Datensätzen zugewiesen.`,
+        error: errors.length ? errors.slice(0, 6).join(" · ") : "",
+      });
     },
     onUndo: async () => {
       if (!appState.rootHandle) return;

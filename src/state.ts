@@ -23,6 +23,8 @@ export type AppState = {
   filterKategorie: string;
   filterTagRules: TagFilterRule[];
   tableSort: TableSortState | null;
+  /** Mehrfachauswahl in der Tabellenansicht (locIds). */
+  tableSelection: string[];
   view: AppView;
   selectedLocId: string | null;
   syncBusy: boolean;
@@ -47,6 +49,7 @@ export const appState: AppState = {
   filterKategorie: "",
   filterTagRules: [],
   tableSort: { fieldKey: "bezeichnung", source: "meta", dir: "asc" },
+  tableSelection: [],
   view: "table",
   selectedLocId: null,
   syncBusy: false,
