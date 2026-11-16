@@ -73,7 +73,11 @@ export function openSchemaEditorModal(schemaId: string, onSaved: () => void): vo
       if (Number.isFinite(n) && n >= 1) draft.metaVersion = Math.floor(n);
     });
     body.append(idRow, nameRow, prefixRow, verRow);
-    body.append(hint("Das Prefix gilt für neue Lox-IDs (z. B. RUD-XXXX-XXXX)."));
+    body.append(
+      hint(
+        "Das Lox-Prefix gehört zu diesem Schema: neue Datensätze mit Standard-Schema erhalten IDs wie RUD-XXXX-XXXX.",
+      ),
+    );
   }
 
   function renderFields() {

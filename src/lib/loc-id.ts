@@ -61,14 +61,18 @@ async function collectTakenIds(root: FileSystemDirectoryHandle): Promise<Set<str
   return taken;
 }
 
-export function parseUserLocIdInput(raw: string, requirePrefix = true): string | null {
+export function parseUserLocIdInput(
+  raw: string,
+  requirePrefix = true,
+  prefixOverride?: string,
+): string | null {
   const parsed = parseLocIdToken(raw);
   if (!isLoxId(parsed)) return null;
   const canonical = defaultLoxIdService.canonicalId(parsed) ?? defaultLoxIdService.normalizeId(parsed);
   if (!defaultLoxIdService.validateId(canonical)) return null;
   if (requirePrefix) {
-    const prefix = getLoxIdPrefix();
-    if (!canonical.startsWith(`${prefix}-`)) return null;
+    const prefix = (prefixOverride ?? getLoxIdPrefix()).toUpperCase();
+    if (!canonical.toUpperCase().startsWith(`${prefix}-`)) return null;
   }
   return canonical;
 }

@@ -140,7 +140,6 @@ export function startApp(container: HTMLElement): void {
     onNewDataset: async () => {
       if (!appState.rootHandle) return;
       const scan = await createDataset(appState.rootHandle, {
-        bezeichnung: "Neuer Datensatz",
         kategorie: "",
       });
       await reloadFromDisk();

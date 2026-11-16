@@ -4,7 +4,7 @@ import {
   setWebDavPassword,
   setWebDavSettings,
 } from "../lib/credentials";
-import { getLoxIdPrefix, setLoxIdPrefix } from "../lib/id-config";
+import { getLoxIdPrefix } from "../lib/id-config";
 import { propfind } from "../lib/webdav-client";
 import { openSystemConfigModal } from "./system-config-modal";
 
@@ -20,10 +20,8 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
 
   dialog.innerHTML = `
     <h2>Einstellungen</h2>
-    <label>ID-Prefix (Lox / Schema) <input class="field" name="idPrefix" maxlength="8" placeholder="RUD" /></label>
-    <p class="muted">Neue Datensätze erhalten IDs wie <code>PREFIX-XXXX-XXXX</code>.</p>
     <h3>System</h3>
-    <p class="muted">Schemata für Datensatzfelder, Validierung, Detail-Layout und Tabellenspalten.</p>
+    <p class="muted">Schemata inkl. <strong>Lox-Prefix</strong> (<code id="schema-prefix-hint"></code> beim Standard-Schema), Felder, Layout und Tabellenspalten.</p>
     <button type="button" class="btn" data-action="system-config">Systemkonfiguration…</button>
     <h3>WebDAV (Synology)</h3>
     <label>Basis-URL <input class="field" name="baseUrl" type="url" placeholder="https://nas.example/webdav/r-base" /></label>
@@ -38,12 +36,12 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
     <p class="modal-status muted" data-status></p>
   `;
 
-  const idPrefix = dialog.querySelector<HTMLInputElement>('input[name="idPrefix"]')!;
+  const prefixHint = dialog.querySelector<HTMLElement>("#schema-prefix-hint");
+  if (prefixHint) prefixHint.textContent = `${getLoxIdPrefix()}-XXXX-XXXX`;
   const baseUrl = dialog.querySelector<HTMLInputElement>('input[name="baseUrl"]')!;
   const username = dialog.querySelector<HTMLInputElement>('input[name="username"]')!;
   const password = dialog.querySelector<HTMLInputElement>('input[name="password"]')!;
   const status = dialog.querySelector<HTMLParagraphElement>("[data-status]")!;
-  idPrefix.value = getLoxIdPrefix();
   baseUrl.value = s.baseUrl;
   username.value = s.username;
   password.value = getWebDavPassword();
@@ -59,7 +57,6 @@ export function openSettingsModal(onClose: () => void, onSchemaChanged?: () => v
   });
 
   dialog.querySelector('[data-action="save"]')?.addEventListener("click", () => {
-    setLoxIdPrefix(idPrefix.value);
     setWebDavSettings({ baseUrl: baseUrl.value, username: username.value });
     setWebDavPassword(password.value);
     status.textContent = "Gespeichert.";

@@ -1,6 +1,11 @@
 import { appState, getSelectedScan, patchState, subscribe } from "../state";
 import { filterRecords } from "../lib/db-index";
-import { displayLocId, type FileUserMeta, type MetaFileEntry } from "../lib/meta-schema";
+import {
+  DEFAULT_BEZEICHNUNG_HINT,
+  displayLocId,
+  type FileUserMeta,
+  type MetaFileEntry,
+} from "../lib/meta-schema";
 import { isImagePath } from "../lib/fs-local";
 import { resolveSchemaForDataset, getDefaultSchema } from "../lib/dataset-schema-store";
 import type { DatasetSchemaDefinition, SchemaFieldDef } from "../lib/dataset-schema-types";
@@ -36,6 +41,28 @@ function restoreSidebarFocus(root: HTMLElement, saved: SidebarFocus | null): voi
 }
 
 /** Platzhalter beim Fokus ausblenden, beim Blur zurück (wenn leer). */
+function displayBezeichnungValue(raw: unknown): string {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s || s === DEFAULT_BEZEICHNUNG_HINT) return "";
+  return s;
+}
+
+function wireBezeichnungField(field: HTMLInputElement | HTMLTextAreaElement, handlers: ShellHandlers): void {
+  field.placeholder = DEFAULT_BEZEICHNUNG_HINT;
+  wirePlaceholderFocus(field);
+  field.addEventListener("focus", () => {
+    if (field.value === DEFAULT_BEZEICHNUNG_HINT) field.value = "";
+  });
+  field.addEventListener("change", () => {
+    const v = field.value.trim();
+    void handlers.onMetaFieldChange("bezeichnung", v);
+    if (!v) {
+      field.value = "";
+      field.placeholder = DEFAULT_BEZEICHNUNG_HINT;
+    }
+  });
+}
+
 function wirePlaceholderFocus(field: HTMLInputElement | HTMLTextAreaElement): void {
   const initial = field.placeholder;
   if (!initial) return;
@@ -153,13 +180,22 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
     patchState({ filterKategorie: cat.value });
   });
 
+  const hasFilter = Boolean(appState.filterQuery.trim() || appState.filterKategorie.trim());
+  const resetBtn = el("button", "btn");
+  resetBtn.type = "button";
+  resetBtn.textContent = "Filter zurücksetzen";
+  resetBtn.disabled = !hasFilter;
+  resetBtn.addEventListener("click", () => {
+    patchState({ filterQuery: "", filterKategorie: "" });
+  });
+
   const newBtn = el("button", "btn btn-primary");
   newBtn.type = "button";
   newBtn.textContent = "+ Neuer Datensatz";
   newBtn.disabled = !appState.ready;
   newBtn.addEventListener("click", () => void handlers.onNewDataset());
 
-  aside.append(search, cat, newBtn);
+  aside.append(search, cat, resetBtn, newBtn);
   root.append(aside);
 }
 
@@ -298,12 +334,17 @@ function renderSchemaFieldInput(
     if (def.dataType === "number") input.type = "number";
     else if (def.dataType === "date") input.type = "date";
     else input.type = "text";
-    input.value = formatFieldForInput(def.dataType, value);
+    if (def.key === "bezeichnung") {
+      input.value = displayBezeichnungValue(value);
+      wireBezeichnungField(input, handlers);
+    } else {
+      input.value = formatFieldForInput(def.dataType, value);
+      input.addEventListener("change", () =>
+        void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, input.value)),
+      );
+    }
     if (def.constraints?.required) input.required = true;
     if (def.constraints?.maxLength) input.maxLength = def.constraints.maxLength;
-    input.addEventListener("change", () =>
-      void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, input.value)),
-    );
     wrap.append(input);
   }
   parent.append(wrap);

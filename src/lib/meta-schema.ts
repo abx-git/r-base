@@ -3,6 +3,8 @@ import { formatLocIdDisplay, isLoxId, parseLocIdToken } from "./loc-id";
 
 export const META_SCHEMA_VERSION = 1 as const;
 export const META_FILENAME = "meta.json";
+/** Nur UI-Platzhalter, nicht in meta.json speichern (legacy-Werte werden migriert). */
+export const DEFAULT_BEZEICHNUNG_HINT = "Neuer Datensatz";
 
 export type FileUserMeta = {
   title?: string;
@@ -157,7 +159,7 @@ export function createEmptyMeta(locId: string, partial?: Partial<Pick<DatasetMet
     schemaVersion: META_SCHEMA_VERSION,
     locId,
     schemaKey,
-    bezeichnung: partial?.bezeichnung?.trim() || "Neuer Datensatz",
+    bezeichnung: partial?.bezeichnung?.trim() ?? "",
     kategorie: partial?.kategorie?.trim() || "",
     lastModified: now,
     notes: "",

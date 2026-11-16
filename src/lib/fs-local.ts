@@ -1,3 +1,4 @@
+import { getLoxIdPrefixForMeta } from "./id-config";
 import {
   allocateNextLocId,
   folderNameForLocId,
@@ -205,8 +206,9 @@ export async function renameDatasetLocId(
   scan: DatasetScan,
   rawNewId: string,
 ): Promise<DatasetScan> {
-  const newId = parseUserLocIdInput(rawNewId, true);
-  if (!newId) throw new Error("Ungültige ID. Erwartet: gültige Lox-ID mit aktuellem Prefix.");
+  const prefix = getLoxIdPrefixForMeta(scan.meta);
+  const newId = parseUserLocIdInput(rawNewId, true, prefix);
+  if (!newId) throw new Error(`Ungültige ID. Erwartet: gültige Lox-ID mit Prefix ${prefix}.`);
   if (locIdsEqual(newId, scan.meta.locId)) return scan;
   const newFolder = folderNameForLocId(newId);
   const children = await listChildNames(root);

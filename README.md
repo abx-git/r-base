@@ -2,7 +2,7 @@
 
 Statische SPA für **lokale Datensätze** (File System Access API) mit **WebDAV-Sync** zum Synology NAS und Excel-Metadaten-Import/-Export.
 
-- Ein Datensatz = Ordner **`RUD-XXXX-XXXX/`** (Lox-ID mit Prefix, Standard `RUD` in Einstellungen)
+- Ein Datensatz = Ordner **`RUD-XXXX-XXXX/`** (Lox-Prefix je **Schema** in der Systemkonfiguration, Standard-Schema `rud-v1` → `RUD`)
 - Metadaten in `meta.json`, Suchindex in IndexedDB
 - Keine WebDAV-Passwörter im Repository (nur Sitzung)
 - **Einstellungen → Systemkonfiguration**: Schemata (Felder, Tabellenspalten, Detail-Layout mit Drag & Drop); Speicherung in `localStorage` pro Browser
