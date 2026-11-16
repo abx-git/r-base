@@ -144,12 +144,19 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   excelImport.disabled = !appState.ready;
   excelImport.addEventListener("click", () => handlers.onExcelImport());
 
+  const csvImport = el("button", "btn");
+  csvImport.type = "button";
+  csvImport.textContent = "CSV import";
+  csvImport.disabled = !appState.ready;
+  csvImport.title = "Rudisten-Jura-CSV: neue Datensätze + Feldschema";
+  csvImport.addEventListener("click", () => handlers.onCsvImport());
+
   const settingsBtn = el("button", "btn");
   settingsBtn.type = "button";
   settingsBtn.textContent = "Einstellungen";
   settingsBtn.addEventListener("click", () => handlers.onOpenSettings());
 
-  actions.append(folderBtn, syncBtn, badge, excelExport, excelImport, settingsBtn);
+  actions.append(folderBtn, syncBtn, badge, excelExport, excelImport, csvImport, settingsBtn);
   header.append(title, actions);
 
   if (appState.rootLabel) {
@@ -778,6 +785,7 @@ export type ShellHandlers = {
   canSync: () => boolean;
   onExcelExport: () => void;
   onExcelImport: () => void;
+  onCsvImport: () => void;
   onOpenSettings: () => void;
   onNewDataset: () => Promise<void>;
   onMetaChange: (partial: { bezeichnung?: string; kategorie?: string; notes?: string }) => Promise<void>;

@@ -31,6 +31,7 @@ import {
 import { hasWebDavCredentials } from "./lib/credentials";
 import { runWebDavSync, pendingLocalChanges } from "./lib/webdav-sync";
 import { downloadBlob, exportMetadataXlsx, importMetadataXlsx } from "./lib/excel-io";
+import { importJuraCsvFile } from "./lib/jura-csv-import";
 import { readFileAtPath } from "./lib/workspace";
 import { setMetaFieldValue } from "./lib/meta-field-access";
 
@@ -131,6 +132,27 @@ export function startApp(container: HTMLElement): void {
           message: `Import: ${result.updated} aktualisiert, ${result.skipped} übersprungen.`,
           error: result.errors.length ? result.errors.join(" · ") : "",
         });
+      });
+      input.click();
+    },
+    onCsvImport: () => {
+      if (!appState.rootHandle) return;
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".csv,text/csv";
+      input.addEventListener("change", async () => {
+        const file = input.files?.[0];
+        if (!file || !appState.rootHandle) return;
+        try {
+          const result = await importJuraCsvFile(appState.rootHandle, file);
+          await reloadFromDisk();
+          patchState({
+            message: `CSV: ${result.created} neu, ${result.updated} aktualisiert, ${result.skipped} übersprungen. Gespeichert unter ${result.storedPath}.`,
+            error: result.errors.length ? result.errors.slice(0, 8).join(" · ") : "",
+          });
+        } catch (e) {
+          patchState({ error: e instanceof Error ? e.message : String(e) });
+        }
       });
       input.click();
     },

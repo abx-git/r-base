@@ -4,6 +4,7 @@ import {
   DEFAULT_RUD_SCHEMA,
   createDefaultSystemSchemaConfig,
 } from "./dataset-schema-defaults";
+import { mergeJuraFieldsIntoBuiltinSchema } from "./jura-csv-schema";
 
 const STORAGE_KEY = "r-base.system-schemas";
 
@@ -51,7 +52,8 @@ function ensureBuiltinTagsField(schema: DatasetSchemaDefinition): DatasetSchemaD
 
 function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
   const colSpan = (n?: number) => (typeof n === "number" && n >= 1 && n <= 12 ? n : 12);
-  const base = schema.id === BUILTIN_SCHEMA_ID ? ensureBuiltinTagsField(schema) : schema;
+  let base = schema.id === BUILTIN_SCHEMA_ID ? ensureBuiltinTagsField(schema) : schema;
+  if (base.id === BUILTIN_SCHEMA_ID) base = mergeJuraFieldsIntoBuiltinSchema(base);
   return {
     ...base,
     layout: (base.layout ?? []).map((row) => ({
