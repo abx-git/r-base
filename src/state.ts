@@ -5,6 +5,12 @@ import type { SyncLogLine, SyncProgress } from "./lib/webdav-sync";
 
 export type AppView = "table" | "detail";
 
+export type TableSortState = {
+  fieldKey: string;
+  source: "meta" | "index";
+  dir: "asc" | "desc";
+};
+
 export type AppState = {
   rootHandle: FileSystemDirectoryHandle | null;
   rootLabel: string;
@@ -16,6 +22,7 @@ export type AppState = {
   filterQuery: string;
   filterKategorie: string;
   filterTagRules: TagFilterRule[];
+  tableSort: TableSortState | null;
   view: AppView;
   selectedLocId: string | null;
   syncBusy: boolean;
@@ -39,6 +46,7 @@ export const appState: AppState = {
   filterQuery: "",
   filterKategorie: "",
   filterTagRules: [],
+  tableSort: { fieldKey: "bezeichnung", source: "meta", dir: "asc" },
   view: "table",
   selectedLocId: null,
   syncBusy: false,

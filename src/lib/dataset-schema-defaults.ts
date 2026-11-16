@@ -31,8 +31,9 @@ export const DEFAULT_RUD_SCHEMA: DatasetSchemaDefinition = {
   tableColumns: [
     { fieldKey: "locId", label: "ID", source: "meta", width: "10rem" },
     { fieldKey: "bezeichnung", label: "Bezeichnung", source: "meta" },
-    { fieldKey: "kategorie", label: "Kategorie", source: "meta", width: "9rem" },
-    { fieldKey: "fileCount", label: "Dateien", source: "index", width: "5rem" },
+    { fieldKey: "kategorie", label: "Kategorie", source: "meta", width: "7rem" },
+    { fieldKey: "tags", label: "Tags", source: "meta", width: "9rem" },
+    { fieldKey: "fileCount", label: "Dateien", source: "index", width: "4.5rem" },
     { fieldKey: "syncStatus", label: "Sync", source: "index", width: "7rem" },
   ],
 };

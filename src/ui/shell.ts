@@ -18,7 +18,7 @@ import {
   getMetaFieldValue,
   serializeFieldInput,
 } from "../lib/meta-field-access";
-import { formatTableCell } from "../lib/table-schema";
+import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 
 let previewUrl: string | null = null;
@@ -224,25 +224,68 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   root.append(aside);
 }
 
+function renderTableTagsCell(td: HTMLElement, tags: string[], maxVisible = 4): void {
+  td.className = "table-cell-tags";
+  if (!tags.length) {
+    td.textContent = "—";
+    td.classList.add("table-cell-empty");
+    return;
+  }
+  const wrap = el("span", "table-tags-inline");
+  const visible = tags.slice(0, maxVisible);
+  for (const t of visible) {
+    const chip = el("span", "table-tag-chip");
+    chip.textContent = t;
+    chip.title = t;
+    wrap.append(chip);
+  }
+  if (tags.length > maxVisible) {
+    const more = el("span", "table-tag-more");
+    more.textContent = `+${tags.length - maxVisible}`;
+    more.title = tags.slice(maxVisible).join(", ");
+    wrap.append(more);
+  }
+  td.title = tags.join(", ");
+  td.append(wrap);
+}
+
 function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const listSchema = getDefaultSchema();
   const columns = listSchema.tableColumns.length ? listSchema.tableColumns : getDefaultSchema().tableColumns;
   const metaById = new Map(appState.scans.map((s) => [s.meta.locId, s.meta]));
+  const sort = appState.tableSort;
 
   const tableWrap = el("div", "table-wrap");
-  const table = el("table", "data-table");
+  const table = el("table", "data-table data-table--compact");
   const thead = el("thead");
   const headRow = el("tr");
   for (const col of columns) {
-    const th = el("th");
-    th.textContent = col.label;
+    const th = el("th", "data-table-th");
+    const label = el("span", "data-table-th-label");
+    label.textContent = col.label;
+    th.append(label);
+    const isSorted = sort?.fieldKey === col.fieldKey && sort?.source === col.source;
+    if (isSorted) {
+      th.classList.add("is-sorted");
+      const mark = el("span", "data-table-sort");
+      mark.textContent = sort!.dir === "asc" ? "▲" : "▼";
+      mark.setAttribute("aria-hidden", "true");
+      th.append(mark);
+    }
+    th.title = "Sortierung: Klick für aufsteigend/absteigend";
     if (col.width) th.style.width = col.width;
+    th.addEventListener("click", (e) => {
+      e.stopPropagation();
+      patchState({ tableSort: nextTableSort(appState.tableSort, col) });
+      handlers.onRerender();
+    });
     headRow.append(th);
   }
   thead.append(headRow);
 
   const tbody = el("tbody");
-  const rows = filterRecordsAdvanced(appState.records, currentRecordFilter());
+  const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter());
+  const rows = sortIndexRecords(filtered, sort, metaById);
   for (const row of rows) {
     const tr = el("tr", "data-row");
     tr.addEventListener("click", () => {
@@ -252,11 +295,19 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     const meta = metaById.get(row.locId);
     for (const col of columns) {
       const td = el("td");
-      let text = formatTableCell(col, row, meta);
-      if (col.fieldKey === "syncStatus" && col.source === "index") {
-        text = statusLabel(row.syncStatus);
+      if (col.fieldKey === "tags" && col.source === "meta") {
+        renderTableTagsCell(td, tableTagsForRow(col, row, meta));
+      } else {
+        let text = formatTableCell(col, row, meta);
+        if (col.fieldKey === "syncStatus" && col.source === "index") {
+          text = statusLabel(row.syncStatus);
+        }
+        td.textContent = text;
+        if (col.fieldKey === "locId") td.className = "table-cell-id";
+        if (col.fieldKey === "fileCount" && col.source === "index") td.className = "table-cell-num";
+        if (text === "—") td.classList.add("table-cell-empty");
       }
-      td.textContent = text;
+      if (col.fieldKey === "bezeichnung") td.className = (td.className ? `${td.className} ` : "") + "table-cell-title";
       tr.append(td);
     }
     tbody.append(tr);
@@ -265,8 +316,13 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   table.append(thead, tbody);
   tableWrap.append(table);
 
-  const backHint = el("p", "muted");
-  backHint.textContent = rows.length ? `${rows.length} Datensätze` : "Keine Datensätze — neu anlegen oder Ordner wählen.";
+  const backHint = el("p", "muted table-list-hint");
+  const sortHint = sort
+    ? ` · Sortierung: ${columns.find((c) => c.fieldKey === sort.fieldKey && c.source === sort.source)?.label ?? sort.fieldKey} (${sort.dir === "asc" ? "aufsteigend" : "absteigend"})`
+    : "";
+  backHint.textContent = rows.length
+    ? `${rows.length} Datensätze${sortHint}`
+    : "Keine Datensätze — neu anlegen oder Ordner wählen.";
   main.append(backHint, tableWrap);
 }
 
@@ -381,16 +437,31 @@ function renderSchemaFieldInput(
   parent.append(wrap);
 }
 
+type SchemaDetailFormOptions = {
+  /** Nach diesem Layout-Container (z. B. Metadaten) Dateien einfügen. */
+  filesInsertAfterContainerId?: string;
+  renderFiles?: (parent: HTMLElement) => void;
+};
+
+function appendSchemaFormChunk(main: HTMLElement): HTMLDivElement {
+  const form = el("div", "detail-form schema-layout");
+  main.append(form);
+  return form;
+}
+
 function renderSchemaDetailForm(
   main: HTMLElement,
   scan: { meta: import("../lib/meta-schema").DatasetMeta },
   schema: DatasetSchemaDefinition,
   handlers: ShellHandlers,
+  options?: SchemaDetailFormOptions,
 ): void {
-  const form = el("div", "detail-form schema-layout");
   const layout = schema.layout.length ? schema.layout : getDefaultSchema().layout;
+  let form = appendSchemaFormChunk(main);
+  let filesInserted = false;
+
   for (const row of layout) {
-    const rowEl = el("div", "schema-form-row");
+    let rowEl = el("div", "schema-form-row");
     for (const container of row.containers) {
       const box = el("section", "schema-form-container");
       box.style.gridColumn = `span ${container.colSpan ?? 12}`;
@@ -408,10 +479,23 @@ function renderSchemaDetailForm(
         renderSchemaFieldInput(box, def, scan, handlers);
       }
       rowEl.append(box);
+
+      if (
+        options?.renderFiles &&
+        options.filesInsertAfterContainerId &&
+        container.id === options.filesInsertAfterContainerId
+      ) {
+        form.append(rowEl);
+        options.renderFiles(main);
+        filesInserted = true;
+        form = appendSchemaFormChunk(main);
+        rowEl = el("div", "schema-form-row");
+      }
     }
-    form.append(rowEl);
+    if (rowEl.childNodes.length) form.append(rowEl);
   }
-  main.append(form);
+
+  if (options?.renderFiles && !filesInserted) options.renderFiles(main);
 }
 
 function parseObsoleteFieldInput(raw: string): unknown {
@@ -586,6 +670,102 @@ function navigateFilteredDetail(delta: number): void {
   patchState({ selectedLocId: next.locId, view: "detail" });
 }
 
+function renderDatasetFilesSection(
+  main: HTMLElement,
+  scan: NonNullable<ReturnType<typeof getSelectedScan>>,
+  handlers: ShellHandlers,
+): void {
+  const section = el("section", "dataset-files-section");
+
+  const drop = el("div", "dropzone");
+  drop.textContent = "PDF/Bilder hier ablegen";
+  drop.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    drop.classList.add("is-over");
+  });
+  drop.addEventListener("dragleave", () => drop.classList.remove("is-over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("is-over");
+    const files = [...(e.dataTransfer?.files ?? [])];
+    if (files.length) void handlers.onAddFiles(files);
+  });
+
+  const fileInput = el("input");
+  fileInput.type = "file";
+  fileInput.multiple = true;
+  fileInput.hidden = true;
+  fileInput.addEventListener("change", () => {
+    const files = [...(fileInput.files ?? [])];
+    if (files.length) void handlers.onAddFiles(files);
+    fileInput.value = "";
+  });
+  const uploadBtn = el("button", "btn");
+  uploadBtn.type = "button";
+  uploadBtn.textContent = "Dateien hinzufügen";
+  uploadBtn.addEventListener("click", () => fileInput.click());
+
+  section.append(drop, uploadBtn, fileInput);
+
+  const images = scan.meta.files.filter((f) => isImagePath(f.path));
+  const others = scan.meta.files.filter((f) => !isImagePath(f.path));
+
+  if (images.length) {
+    const h = el("h3", "files-heading");
+    h.textContent = "Bilder";
+    section.append(h);
+    const grid = el("div", "thumb-grid");
+    for (const file of images) {
+      const tile = el("div", "thumb-tile");
+      const img = el("img", "thumb-img");
+      img.alt = file.path;
+      const cap = el("span", "thumb-caption");
+      cap.textContent = file.meta?.title?.trim() || (file.path.split("/").pop() ?? file.path);
+      const del = el("button", "btn thumb-del");
+      del.type = "button";
+      del.textContent = "Löschen";
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!window.confirm(`„${file.path}“ unwiderruflich löschen?`)) return;
+        void handlers.onDeleteFile(file.path);
+      });
+      tile.append(img, cap, del);
+      renderFileMetaEditor(tile, file, handlers);
+      attachThumb(tile, img, file.path, handlers);
+      grid.append(tile);
+    }
+    section.append(grid);
+  }
+
+  if (others.length) {
+    const h2 = el("h3", "files-heading");
+    h2.textContent = "Weitere Dateien";
+    section.append(h2);
+    const list = el("ul", "file-list");
+    for (const file of others) {
+      const li = el("li", "file-item file-item-row");
+      const btn = el("button", "link-btn");
+      btn.type = "button";
+      btn.textContent = `${file.path} (${Math.round(file.size / 1024)} KB)`;
+      btn.addEventListener("click", () => void handlers.onPreviewFile(file.path));
+      const del = el("button", "btn");
+      del.type = "button";
+      del.textContent = "Löschen";
+      del.addEventListener("click", () => {
+        if (!window.confirm(`„${file.path}“ löschen?`)) return;
+        void handlers.onDeleteFile(file.path);
+      });
+      const metaBox = el("div", "file-meta-wrap");
+      renderFileMetaEditor(metaBox, file, handlers);
+      li.append(btn, del, metaBox);
+      list.append(li);
+    }
+    section.append(list);
+  }
+
+  main.append(section);
+}
+
 function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   const scan = getSelectedScan();
   if (!scan) {
@@ -653,94 +833,11 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
-  renderSchemaDetailForm(main, scan, schema, handlers);
+  renderSchemaDetailForm(main, scan, schema, handlers, {
+    filesInsertAfterContainerId: "container-meta",
+    renderFiles: (parent) => renderDatasetFilesSection(parent, scan, handlers),
+  });
   renderObsoleteFieldsSection(main, scan, schema, handlers);
-
-  const drop = el("div", "dropzone");
-  drop.textContent = "PDF/Bilder hier ablegen";
-  drop.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    drop.classList.add("is-over");
-  });
-  drop.addEventListener("dragleave", () => drop.classList.remove("is-over"));
-  drop.addEventListener("drop", (e) => {
-    e.preventDefault();
-    drop.classList.remove("is-over");
-    const files = [...(e.dataTransfer?.files ?? [])];
-    if (files.length) void handlers.onAddFiles(files);
-  });
-
-  const fileInput = el("input");
-  fileInput.type = "file";
-  fileInput.multiple = true;
-  fileInput.hidden = true;
-  fileInput.addEventListener("change", () => {
-    const files = [...(fileInput.files ?? [])];
-    if (files.length) void handlers.onAddFiles(files);
-    fileInput.value = "";
-  });
-  const uploadBtn = el("button", "btn");
-  uploadBtn.type = "button";
-  uploadBtn.textContent = "Dateien hinzufügen";
-  uploadBtn.addEventListener("click", () => fileInput.click());
-
-  main.append(drop, uploadBtn, fileInput);
-
-  const images = scan.meta.files.filter((f) => isImagePath(f.path));
-  const others = scan.meta.files.filter((f) => !isImagePath(f.path));
-
-  if (images.length) {
-    const h = el("h3", "files-heading");
-    h.textContent = "Bilder";
-    main.append(h);
-    const grid = el("div", "thumb-grid");
-    for (const file of images) {
-      const tile = el("div", "thumb-tile");
-      const img = el("img", "thumb-img");
-      img.alt = file.path;
-      const cap = el("span", "thumb-caption");
-      cap.textContent = file.meta?.title?.trim() || (file.path.split("/").pop() ?? file.path);
-      const del = el("button", "btn thumb-del");
-      del.type = "button";
-      del.textContent = "Löschen";
-      del.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (!window.confirm(`„${file.path}“ unwiderruflich löschen?`)) return;
-        void handlers.onDeleteFile(file.path);
-      });
-      tile.append(img, cap, del);
-      renderFileMetaEditor(tile, file, handlers);
-      attachThumb(tile, img, file.path, handlers);
-      grid.append(tile);
-    }
-    main.append(grid);
-  }
-
-  if (others.length) {
-    const h2 = el("h3", "files-heading");
-    h2.textContent = "Weitere Dateien";
-    main.append(h2);
-    const list = el("ul", "file-list");
-    for (const file of others) {
-      const li = el("li", "file-item file-item-row");
-      const btn = el("button", "link-btn");
-      btn.type = "button";
-      btn.textContent = `${file.path} (${Math.round(file.size / 1024)} KB)`;
-      btn.addEventListener("click", () => void handlers.onPreviewFile(file.path));
-      const del = el("button", "btn");
-      del.type = "button";
-      del.textContent = "Löschen";
-      del.addEventListener("click", () => {
-        if (!window.confirm(`„${file.path}“ löschen?`)) return;
-        void handlers.onDeleteFile(file.path);
-      });
-      const metaBox = el("div", "file-meta-wrap");
-      renderFileMetaEditor(metaBox, file, handlers);
-      li.append(btn, del, metaBox);
-      list.append(li);
-    }
-    main.append(list);
-  }
 
   const preview = el("div", "preview-pane");
   preview.id = "preview-pane";

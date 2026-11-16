@@ -39,13 +39,21 @@ function normalizeConfig(config: SystemSchemaConfig): SystemSchemaConfig {
 }
 
 function ensureBuiltinTagsField(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
-  if (schema.id !== BUILTIN_SCHEMA_ID || schema.fields.some((f) => f.key === "tags")) return schema;
-  const next = structuredClone(schema);
-  next.fields.push({ key: "tags", label: "Tags", dataType: "tags" });
-  for (const row of next.layout) {
-    for (const c of row.containers) {
-      if (c.fieldKeys.includes("notes") && !c.fieldKeys.includes("tags")) c.fieldKeys.push("tags");
+  if (schema.id !== BUILTIN_SCHEMA_ID) return schema;
+  let next = structuredClone(schema);
+  if (!next.fields.some((f) => f.key === "tags")) {
+    next.fields.push({ key: "tags", label: "Tags", dataType: "tags" });
+    for (const row of next.layout) {
+      for (const c of row.containers) {
+        if (c.fieldKeys.includes("notes") && !c.fieldKeys.includes("tags")) c.fieldKeys.push("tags");
+      }
     }
+  }
+  if (!next.tableColumns.some((c) => c.fieldKey === "tags")) {
+    const afterKat = next.tableColumns.findIndex((c) => c.fieldKey === "kategorie");
+    const col = { fieldKey: "tags" as const, label: "Tags", source: "meta" as const, width: "9rem" };
+    if (afterKat >= 0) next.tableColumns.splice(afterKat + 1, 0, col);
+    else next.tableColumns.push(col);
   }
   return next;
 }

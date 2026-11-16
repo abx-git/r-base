@@ -1,10 +1,12 @@
 import type { DatasetScan } from "./fs-local";
+import type { DatasetMeta } from "./meta-schema";
 import {
   createDataset,
   scanAllDatasets,
   writeMetaToFolder,
 } from "./fs-local";
 import { getMetaFieldValue, setMetaFieldValue } from "./meta-field-access";
+import { normalizeDatasetTags } from "./dataset-tags";
 import { parseJuraCsvText } from "./csv-parse";
 import {
   JURA_CSV_COLUMN_KEYS,
@@ -18,6 +20,11 @@ import { BUILTIN_SCHEMA_ID, DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults
 import { getDirectoryAtPath, writeFileInFolder } from "./workspace";
 
 const IMPORTS_DIR = "_imports";
+
+export type JuraCsvImportOptions = {
+  /** Wird allen in diesem Lauf neu angelegten Datensätzen hinzugefügt (ohne Duplikate). */
+  importTag?: string;
+};
 
 export type JuraCsvImportResult = {
   created: number;
@@ -44,6 +51,12 @@ function findScanByEigeneNr(scans: DatasetScan[], eigeneNr: string): DatasetScan
     const v = getMetaFieldValue(s.meta, JURA_CSV_MATCH_KEY);
     return typeof v === "string" && v.trim().toLowerCase() === key;
   });
+}
+
+function applyImportTag(meta: DatasetMeta, importTag: string | undefined): void {
+  const tag = importTag?.trim();
+  if (!tag) return;
+  meta.tags = normalizeDatasetTags([...(meta.tags ?? []), tag]);
 }
 
 function applyJuraRowToMeta(scan: DatasetScan, row: Partial<Record<JuraCsvColumnKey, string>>): void {
@@ -79,7 +92,9 @@ async function storeCsvInWorkspace(root: FileSystemDirectoryHandle, file: File):
 export async function importJuraCsvFile(
   root: FileSystemDirectoryHandle,
   file: File,
+  options: JuraCsvImportOptions = {},
 ): Promise<JuraCsvImportResult> {
+  const importTag = options.importTag?.trim() || undefined;
   ensureJuraCsvSchemaInStore();
   const text = await file.text();
   const { rows } = parseJuraCsvText(text);
@@ -115,6 +130,7 @@ export async function importJuraCsvFile(
         kategorie: row.sammlung?.trim() || "",
       });
       applyJuraRowToMeta(scan, row);
+      applyImportTag(scan.meta, importTag);
       await writeMetaToFolder(scan.handle, scan.meta);
       scans = [...scans, scan];
       created++;

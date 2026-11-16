@@ -84,6 +84,17 @@
   resize: vertical;
 }
 
+.dataset-files-section {
+  margin: 0.5rem 0 1rem;
+  padding: 0.25rem 0 0.75rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.dataset-files-section .dropzone {
+  margin-top: 0.5rem;
+}
+
 .dropzone {
   margin-top: 1rem;
   border: 2px dashed var(--line);

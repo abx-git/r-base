@@ -143,11 +143,20 @@ export function startApp(container: HTMLElement): void {
       input.addEventListener("change", async () => {
         const file = input.files?.[0];
         if (!file || !appState.rootHandle) return;
+        const tagRaw = window.prompt(
+          "Tag für neu angelegte Datensätze (optional, leer = kein Tag):",
+          "Jura-Import",
+        );
+        if (tagRaw === null) return;
+        const importTag = tagRaw.trim();
         try {
-          const result = await importJuraCsvFile(appState.rootHandle, file);
+          const result = await importJuraCsvFile(appState.rootHandle, file, {
+            importTag: importTag || undefined,
+          });
           await reloadFromDisk();
+          const tagNote = importTag ? ` Tag „${importTag}".` : "";
           patchState({
-            message: `CSV: ${result.created} neu, ${result.updated} aktualisiert, ${result.skipped} übersprungen. Gespeichert unter ${result.storedPath}.`,
+            message: `CSV: ${result.created} neu, ${result.updated} aktualisiert, ${result.skipped} übersprungen.${tagNote} Gespeichert unter ${result.storedPath}.`,
             error: result.errors.length ? result.errors.slice(0, 8).join(" · ") : "",
           });
         } catch (e) {
