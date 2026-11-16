@@ -1,0 +1,38 @@
+:root {
+  color-scheme: light;
+  --bg: #ece8e2;
+  --panel: #f7f5f1;
+  --ink: #1c1b19;
+  --muted: #6b6560;
+  --line: rgba(28, 27, 25, 0.12);
+  --accent: #1c1b19;
+  --control: #ffffff;
+  --ok: #1f6b3a;
+  --warn: #8a5a00;
+  --err: #8b1e1e;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}

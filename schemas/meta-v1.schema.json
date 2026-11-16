@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "R-Base Dataset Meta",
+  "type": "object",
+  "required": ["schemaVersion", "locId", "bezeichnung", "kategorie", "lastModified", "files", "sync"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "locId": { "type": "string", "minLength": 1 },
+    "bezeichnung": { "type": "string" },
+    "kategorie": { "type": "string" },
+    "lastModified": { "type": "string", "format": "date-time" },
+    "notes": { "type": "string" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "size", "mime", "lastModified"],
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string" },
+          "size": { "type": "number" },
+          "mime": { "type": "string" },
+          "lastModified": { "type": "string" },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "capturedAt": { "type": ["string", "null"] },
+              "tags": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "sync": {
+      "type": "object",
+      "properties": {
+        "lastSyncedAt": { "type": ["string", "null"] },
+        "remoteEtag": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

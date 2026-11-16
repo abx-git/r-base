@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "R-Base System Schema Configuration",
+  "type": "object",
+  "required": ["configVersion", "defaultSchemaId", "schemas"],
+  "properties": {
+    "configVersion": { "const": 1 },
+    "defaultSchemaId": { "type": "string", "minLength": 1 },
+    "schemas": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/datasetSchema" }
+    }
+  },
+  "$defs": {
+    "datasetSchema": {
+      "type": "object",
+      "required": ["id", "name", "loxPrefix", "metaVersion", "fields", "layout", "tableColumns"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "loxPrefix": { "type": "string", "pattern": "^[A-Z0-9]{2,8}$" },
+        "metaVersion": { "type": "integer", "minimum": 1 },
+        "builtin": { "type": "boolean" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+        "layout": { "type": "array", "items": { "$ref": "#/$defs/layoutRow" } },
+        "tableColumns": { "type": "array", "items": { "$ref": "#/$defs/tableColumn" } }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["key", "label", "dataType"],
+      "properties": {
+        "key": { "type": "string" },
+        "label": { "type": "string" },
+        "dataType": {
+          "type": "string",
+          "enum": ["locId", "string", "text", "number", "date", "boolean", "select", "tags"]
+        },
+        "system": { "type": "boolean" },
+        "options": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "layoutRow": {
+      "type": "object",
+      "required": ["id", "containers"],
+      "properties": {
+        "id": { "type": "string" },
+        "containers": { "type": "array", "items": { "$ref": "#/$defs/container" } }
+      }
+    },
+    "container": {
+      "type": "object",
+      "required": ["id", "fieldKeys"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "colSpan": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "fieldKeys": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "tableColumn": {
+      "type": "object",
+      "required": ["fieldKey", "label"],
+      "properties": {
+        "fieldKey": { "type": "string" },
+        "label": { "type": "string" },
+        "width": { "type": "string" },
+        "source": { "type": "string", "enum": ["meta", "index"] }
+      }
+    }
+  }
+}
