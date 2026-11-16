@@ -1,0 +1,143 @@
+.tag-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0.1rem;
+}
+
+.tag-section-hint {
+  font-size: 0.72rem;
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.tag-cloud--suggest {
+  margin-top: 0.35rem;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--control);
+  color: var(--ink);
+  font-family: inherit;
+}
+
+button.tag-chip {
+  cursor: pointer;
+  padding: 0.22rem 0.55rem;
+}
+
+button.tag-chip:hover {
+  filter: brightness(0.97);
+}
+
+.tag-chip--neutral {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+.tag-chip--include {
+  border-color: #4caf78;
+  background: #e9f7ef;
+  color: #1d6b3c;
+  font-weight: 600;
+}
+
+.tag-chip--include .tag-chip-prefix {
+  color: #2d8a50;
+  font-weight: 700;
+}
+
+.tag-chip--exclude {
+  border-color: #d87070;
+  background: #fdf0f0;
+  color: #9b3333;
+}
+
+.tag-chip--exclude .tag-chip-label {
+  text-decoration: line-through;
+}
+
+.tag-chip--exclude .tag-chip-prefix {
+  color: #c44;
+  font-weight: 700;
+}
+
+.tag-chip--assigned {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  padding-right: 0.25rem;
+}
+
+.tag-chip--suggestion {
+  border-style: dashed;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.tag-chip--suggestion:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.tag-chip-prefix {
+  margin-right: 0.1rem;
+}
+
+.tag-chip-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  margin-left: 0.1rem;
+}
+
+.tag-chip-remove:hover {
+  opacity: 1;
+}
+
+.tag-add-row {
+  margin-top: 0.35rem;
+}
+
+.tag-cloud-input {
+  width: 100%;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.tag-cloud-input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--control);
+}
+
+.tag-field-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}

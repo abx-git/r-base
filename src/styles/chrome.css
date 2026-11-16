@@ -43,11 +43,8 @@
   gap: 0.5rem;
 }
 
-.filter-tag-mode {
-  font-size: 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+.tag-filter-section {
+  margin: 0.15rem 0 0.35rem;
 }
 
 .main-pane {

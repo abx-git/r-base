@@ -1,7 +1,8 @@
 import { appState, getSelectedScan, patchState, subscribe } from "../state";
 import type { IndexRecord } from "../lib/db-index";
-import { collectKnownDatasetTags } from "../lib/dataset-tags";
+import { normalizeDatasetTags } from "../lib/dataset-tags";
 import { filterRecordsAdvanced, hasActiveRecordFilter, type RecordFilterState } from "../lib/record-filter";
+import { renderDatasetTagsField, renderSidebarTagFilter } from "./tag-cloud";
 import {
   DEFAULT_BEZEICHNUNG_HINT,
   displayLocId,
@@ -164,23 +165,8 @@ function currentRecordFilter(): RecordFilterState {
   return {
     query: appState.filterQuery,
     kategorie: appState.filterKategorie,
-    tagQuery: appState.filterTag,
-    tagMode: appState.filterTagMode,
+    tagRules: appState.filterTagRules,
   };
-}
-
-function attachTagSuggestions(input: HTMLInputElement, listId: string): void {
-  const known = collectKnownDatasetTags(appState.scans);
-  if (!known.length) return;
-  const dl = el("datalist");
-  dl.id = listId;
-  for (const tag of known) {
-    const opt = el("option");
-    opt.value = tag;
-    dl.append(opt);
-  }
-  input.setAttribute("list", listId);
-  input.parentElement?.append(dl);
 }
 
 function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
@@ -206,41 +192,6 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
     patchState({ filterKategorie: cat.value });
   });
 
-  const tagModeWrap = el("label", "filter-tag-mode");
-  tagModeWrap.textContent = "Tag-Filter";
-  const tagMode = el("select", "field");
-  tagMode.name = "filterTagMode";
-  for (const [value, label] of [
-    ["off", "Nicht berücksichtigt"],
-    ["include", "Enthalten"],
-    ["exclude", "Nicht enthalten"],
-  ] as const) {
-    const opt = el("option");
-    opt.value = value;
-    opt.textContent = label;
-    tagMode.append(opt);
-  }
-  tagMode.value = appState.filterTagMode;
-  tagModeWrap.append(tagMode);
-
-  const tagInput = el("input", "field");
-  tagInput.name = "filterTag";
-  tagInput.autocomplete = "off";
-  tagInput.placeholder = "Tags (kommagetrennt)";
-  tagInput.value = appState.filterTag;
-  tagInput.disabled = appState.filterTagMode === "off";
-  wirePlaceholderFocus(tagInput);
-  tagInput.addEventListener("input", () => {
-    patchState({ filterTag: tagInput.value });
-  });
-  attachTagSuggestions(tagInput, "dataset-tag-suggestions-filter");
-
-  tagMode.addEventListener("change", () => {
-    const mode = tagMode.value as RecordFilterState["tagMode"];
-    tagInput.disabled = mode === "off";
-    patchState({ filterTagMode: mode });
-  });
-
   const hasFilter = hasActiveRecordFilter(currentRecordFilter());
   const resetBtn = el("button", "btn");
   resetBtn.type = "button";
@@ -250,8 +201,7 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
     patchState({
       filterQuery: "",
       filterKategorie: "",
-      filterTag: "",
-      filterTagMode: "off",
+      filterTagRules: [],
     });
   });
 
@@ -261,7 +211,9 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   newBtn.disabled = !appState.ready;
   newBtn.addEventListener("click", () => void handlers.onNewDataset());
 
-  aside.append(search, cat, tagModeWrap, tagInput, resetBtn, newBtn);
+  aside.append(search, cat);
+  renderSidebarTagFilter(aside);
+  aside.append(resetBtn, newBtn);
   root.append(aside);
 }
 
@@ -396,18 +348,11 @@ function renderSchemaFieldInput(
     );
     wrap.append(sel);
   } else if (def.dataType === "tags") {
-    const input = el("input", "field");
-    input.type = "text";
-    input.value = formatFieldForInput(def.dataType, value);
-    if (!input.value) {
-      input.placeholder = "Tags, kommagetrennt";
-      wirePlaceholderFocus(input);
-    }
-    attachTagSuggestions(input, `dataset-tag-suggestions-${def.key}`);
-    input.addEventListener("change", () =>
-      void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, input.value)),
-    );
-    wrap.append(input);
+    const tags = normalizeDatasetTags(getMetaFieldValue(scan.meta, def.key));
+    renderDatasetTagsField(parent, tags, (next) => {
+      void handlers.onMetaFieldChange(def.key, next);
+    });
+    return;
   } else {
     const input = el("input", "field");
     if (def.dataType === "number") input.type = "number";

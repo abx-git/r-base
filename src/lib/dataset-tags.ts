@@ -32,18 +32,22 @@ export function parseFilterTags(raw: string): string[] {
   return normalizeDatasetTags(raw.split(/[,;]/).map((s) => s.trim()).filter(Boolean));
 }
 
-export type TagFilterMode = "off" | "include" | "exclude";
+export type TagFilterRule = {
+  tag: string;
+  mode: "include" | "exclude";
+};
 
-export function matchesTagFilter(tags: string[] | undefined, mode: TagFilterMode, filterTags: string[]): boolean {
-  if (mode === "off" || !filterTags.length) return true;
-  const norm = (s: string) => s.trim().toLowerCase();
-  const set = new Set((tags ?? []).map(norm).filter(Boolean));
-  const wanted = filterTags.map(norm).filter(Boolean);
-  if (!wanted.length) return true;
-  if (mode === "include") {
-    return wanted.some((t) => set.has(t));
+export function matchesTagRules(tags: string[] | undefined, rules: TagFilterRule[]): boolean {
+  if (!rules.length) return true;
+  const set = new Set((tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean));
+  for (const rule of rules) {
+    const key = rule.tag.trim().toLowerCase();
+    if (!key) continue;
+    const has = set.has(key);
+    if (rule.mode === "include" && !has) return false;
+    if (rule.mode === "exclude" && has) return false;
   }
-  return wanted.every((t) => !set.has(t));
+  return true;
 }
 
 export function metaTagsText(meta: DatasetMeta): string {
