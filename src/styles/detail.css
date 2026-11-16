@@ -77,14 +77,15 @@
   margin: 0 auto;
 }
 
-.id-row {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.id-row .field {
-  flex: 1;
+.id-display {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--control);
+  font-size: 0.92rem;
+  font-family: inherit;
+  cursor: context-menu;
+  user-select: text;
 }
 
 .files-heading {
@@ -95,7 +96,7 @@
 
 .thumb-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   gap: 0.65rem;
 }
 
@@ -108,6 +109,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .thumb-img {
@@ -196,7 +200,20 @@
   margin-top: 0.15rem;
 }
 
+.thumb-tile .file-meta-fields {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.thumb-tile .file-meta-fields label {
+  min-width: 0;
+}
+
 .thumb-tile .file-meta-fields .field {
   font-size: 0.78rem;
   padding: 0.3rem 0.45rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }

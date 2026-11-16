@@ -15,6 +15,38 @@ import { formatTableCell } from "../lib/table-schema";
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
 
+type SidebarFocus = { name: string; start: number | null; end: number | null };
+
+function captureSidebarFocus(): SidebarFocus | null {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLInputElement) || !el.closest(".sidebar") || !el.name) return null;
+  return { name: el.name, start: el.selectionStart, end: el.selectionEnd };
+}
+
+function restoreSidebarFocus(root: HTMLElement, saved: SidebarFocus | null): void {
+  if (!saved) return;
+  const input = root.querySelector<HTMLInputElement>(`.sidebar input[name="${saved.name}"]`);
+  if (!input) return;
+  input.focus();
+  try {
+    input.setSelectionRange(saved.start, saved.end);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Platzhalter beim Fokus ausblenden, beim Blur zurück (wenn leer). */
+function wirePlaceholderFocus(field: HTMLInputElement | HTMLTextAreaElement): void {
+  const initial = field.placeholder;
+  if (!initial) return;
+  field.addEventListener("focus", () => {
+    field.placeholder = "";
+  });
+  field.addEventListener("blur", () => {
+    if (!field.value) field.placeholder = initial;
+  });
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -102,19 +134,23 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   const aside = el("aside", "sidebar");
   const search = el("input", "field");
   search.type = "search";
+  search.name = "filterQuery";
+  search.autocomplete = "off";
   search.placeholder = "Suche (ID, Bezeichnung, Kategorie)";
   search.value = appState.filterQuery;
+  wirePlaceholderFocus(search);
   search.addEventListener("input", () => {
     patchState({ filterQuery: search.value });
-    handlers.onRerender();
   });
 
   const cat = el("input", "field");
+  cat.name = "filterKategorie";
+  cat.autocomplete = "off";
   cat.placeholder = "Kategorie-Filter";
   cat.value = appState.filterKategorie;
+  wirePlaceholderFocus(cat);
   cat.addEventListener("input", () => {
     patchState({ filterKategorie: cat.value });
-    handlers.onRerender();
   });
 
   const newBtn = el("button", "btn btn-primary");
@@ -173,48 +209,39 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   main.append(backHint, tableWrap);
 }
 
+function beginIdChange(scan: { meta: { locId: string } }, handlers: ShellHandlers): void {
+  const current = displayLocId(scan.meta.locId);
+  const ok = window.confirm(
+    "ID wirklich ändern? Der Datensatz-Ordner wird umbenannt. Ungültige IDs werden abgelehnt.",
+  );
+  if (!ok) return;
+  const next = window.prompt("Neue ID:", current);
+  if (!next || next.trim() === current) return;
+  void (async () => {
+    try {
+      await handlers.onChangeDatasetId(next.trim());
+    } catch (e) {
+      patchState({ error: e instanceof Error ? e.message : String(e) });
+    }
+  })();
+}
+
 function renderIdField(parent: HTMLElement, scan: { meta: { locId: string } }, handlers: ShellHandlers): void {
   const locField = el("label");
   locField.textContent = "ID";
 
-  const row = el("div", "id-row");
-  const locVal = el("input", "field");
-  locVal.readOnly = true;
-  locVal.value = displayLocId(scan.meta.locId);
-  locVal.setAttribute("data-id-input", "1");
-
-  let unlocked = false;
-  const unlockBtn = el("button", "btn");
-  unlockBtn.type = "button";
-  unlockBtn.textContent = "Bearbeiten…";
-  unlockBtn.addEventListener("click", () => {
-    if (unlocked) {
-      void (async () => {
-        const next = locVal.value.trim();
-        try {
-          await handlers.onChangeDatasetId(next);
-          locVal.readOnly = true;
-          unlocked = false;
-          unlockBtn.textContent = "Bearbeiten…";
-          locVal.value = displayLocId(appState.selectedLocId ?? next);
-        } catch (e) {
-          patchState({ error: e instanceof Error ? e.message : String(e) });
-        }
-      })();
-      return;
-    }
-    const ok = window.confirm(
-      "ID wirklich ändern? Der Datensatz-Ordner wird umbenannt. Ungültige IDs werden abgelehnt.",
-    );
-    if (!ok) return;
-    unlocked = true;
-    locVal.readOnly = false;
-    locVal.focus();
-    unlockBtn.textContent = "Speichern";
+  const display = el("div", "id-display");
+  display.textContent = displayLocId(scan.meta.locId);
+  display.title = "Rechtsklick: ID ändern…";
+  display.tabIndex = 0;
+  display.setAttribute("role", "textbox");
+  display.setAttribute("aria-readonly", "true");
+  display.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    beginIdChange(scan, handlers);
   });
 
-  row.append(locVal, unlockBtn);
-  locField.append(row);
+  locField.append(display);
   parent.append(locField);
 }
 
@@ -335,6 +362,10 @@ function renderFileMetaEditor(container: HTMLElement, file: MetaFileEntry, handl
   titleWrap.textContent = "Titel";
   const titleInput = el("input", "field");
   titleInput.value = file.meta?.title ?? "";
+  if (!titleInput.value) {
+    titleInput.placeholder = "Titel";
+    wirePlaceholderFocus(titleInput);
+  }
   titleInput.addEventListener("change", () =>
     void handlers.onFileMetaChange(file.path, { title: titleInput.value }),
   );
@@ -344,6 +375,10 @@ function renderFileMetaEditor(container: HTMLElement, file: MetaFileEntry, handl
   descWrap.textContent = "Beschreibung";
   const descInput = el("textarea", "field file-meta-area");
   descInput.value = file.meta?.description ?? "";
+  if (!descInput.value) {
+    descInput.placeholder = "Beschreibung";
+    wirePlaceholderFocus(descInput);
+  }
   descInput.addEventListener("change", () =>
     void handlers.onFileMetaChange(file.path, { description: descInput.value }),
   );
@@ -366,6 +401,10 @@ function renderFileMetaEditor(container: HTMLElement, file: MetaFileEntry, handl
   tagsWrap.textContent = "Tags (kommagetrennt)";
   const tagsInput = el("input", "field");
   tagsInput.value = (file.meta?.tags ?? []).join(", ");
+  if (!tagsInput.value) {
+    tagsInput.placeholder = "Tags, kommagetrennt";
+    wirePlaceholderFocus(tagsInput);
+  }
   tagsInput.addEventListener("change", () => {
     const tags = tagsInput.value
       .split(/[,;]/)
@@ -563,6 +602,7 @@ export type ShellHandlers = {
 
 export function mountShell(container: HTMLElement, handlers: ShellHandlers): void {
   const render = () => {
+    const sidebarFocus = captureSidebarFocus();
     container.replaceChildren();
     clearPreview();
     renderMessages(container);
@@ -575,6 +615,7 @@ export function mountShell(container: HTMLElement, handlers: ShellHandlers): voi
     body.append(main);
     container.append(body);
     renderSyncLog(container);
+    restoreSidebarFocus(container, sidebarFocus);
   };
 
   subscribe(render);
