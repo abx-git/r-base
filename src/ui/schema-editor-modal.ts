@@ -18,8 +18,13 @@ import {
 export type SchemaEditorOpenOptions = {
   initialTab?: SchemaEditorInitialTab;
   datasetContext?: {
-    meta: DatasetMeta;
-    onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
+    locId: string;
+    getMeta: () => DatasetMeta | undefined;
+    onSetFieldHidden: (
+      fieldKey: string,
+      hidden: boolean,
+      schema: DatasetSchemaDefinition,
+    ) => Promise<void>;
     onRerender: () => void;
   };
 };

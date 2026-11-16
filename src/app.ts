@@ -35,6 +35,7 @@ import { importJuraCsvFile } from "./lib/jura-csv-import";
 import { readFileAtPath } from "./lib/workspace";
 import { setMetaFieldValue } from "./lib/meta-field-access";
 import { normalizeDatasetTags } from "./lib/dataset-tags";
+import type { DatasetSchemaDefinition } from "./lib/dataset-schema-types";
 import {
   installSystemSchemaConfig,
   loadSystemSchemaConfig,
@@ -341,10 +342,10 @@ export function startApp(container: HTMLElement): void {
         error: errors.length ? errors.slice(0, 6).join(" · ") : "",
       });
     },
-    onSetFieldHidden: async (fieldKey, hidden) => {
+    onSetFieldHidden: async (fieldKey, hidden, schemaOverride?: DatasetSchemaDefinition) => {
       const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
       if (!scan) return;
-      const schema = resolveSchemaForDataset(scan.meta);
+      const schema = schemaOverride ?? resolveSchemaForDataset(scan.meta);
       setSchemaFieldHidden(scan.meta, schema, fieldKey, hidden);
       try {
         await writeMetaToFolder(scan.handle, scan.meta);

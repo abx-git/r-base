@@ -28,7 +28,7 @@ import {
 } from "../lib/meta-field-access";
 import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
-import { getHiddenFieldKeySet } from "../lib/meta-hidden-fields";
+import { getHiddenFieldKeySet, resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
 import { visibleTableColumns } from "../lib/table-layout";
 
 let previewUrl: string | null = null;
@@ -295,8 +295,11 @@ function openSchemaVisibilityEditor(handlers: ShellHandlers, detailMeta?: Datase
     datasetContext:
       detailMeta && scan && scan.meta.locId === detailMeta.locId
         ? {
-            meta: scan.meta,
-            onSetFieldHidden: handlers.onSetFieldHidden,
+            locId: scan.meta.locId,
+            getMeta: () =>
+              appState.scans.find((s) => s.meta.locId === scan.meta.locId)?.meta,
+            onSetFieldHidden: (fieldKey, hidden, schema) =>
+              handlers.onSetFieldHidden(fieldKey, hidden, schema),
             onRerender: handlers.onRerender,
           }
         : undefined,
@@ -1002,7 +1005,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
-  const hiddenKeys = getHiddenFieldKeySet(scan.meta, schema);
+  const hiddenKeys = resolveDetailHiddenKeys(scan.meta, schema);
   renderSchemaDetailForm(main, scan, schema, handlers, {
     filesInsertAfterContainerId: "container-meta",
     renderFiles: (parent) => renderDatasetFilesSection(parent, scan, handlers),
@@ -1066,7 +1069,11 @@ export type ShellHandlers = {
   onSoftDeleteDataset: () => Promise<void>;
   onBulkSoftDelete: (locIds: string[]) => Promise<void>;
   onBulkAssignTag: (locIds: string[], tag: string) => Promise<void>;
-  onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
+  onSetFieldHidden: (
+    fieldKey: string,
+    hidden: boolean,
+    schema?: DatasetSchemaDefinition,
+  ) => Promise<void>;
   onUndo: () => Promise<void>;
   getFileObjectUrl: (relativePath: string) => Promise<string>;
   onRerender: () => void;

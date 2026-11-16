@@ -5,6 +5,7 @@ import {
   getHiddenFieldKeySet,
   isOptionalSchemaField,
   orderedSchemaFieldKeys,
+  resolveDetailHiddenKeys,
 } from "../lib/meta-hidden-fields";
 import {
   enableDrop,
@@ -19,8 +20,13 @@ import {
 export type DetailRenderContext = {
   draft: DatasetSchemaDefinition;
   datasetContext?: {
-    meta: DatasetMeta;
-    onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
+    locId: string;
+    getMeta: () => DatasetMeta | undefined;
+    onSetFieldHidden: (
+      fieldKey: string,
+      hidden: boolean,
+      schema: DatasetSchemaDefinition,
+    ) => Promise<void>;
     onRerender: () => void;
   };
   rerender: () => void;
@@ -40,7 +46,9 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
       title,
       hint("Überschreibt die Schema-Vorgabe in der Detailansicht — wird in meta.json gespeichert."),
     );
-    const hiddenDetail = getHiddenFieldKeySet(datasetContext.meta, draft);
+    const meta = datasetContext.getMeta();
+    const hiddenDetail =
+      meta !== undefined ? resolveDetailHiddenKeys(meta, draft) : new Set<string>();
     for (const key of orderedSchemaFieldKeys(draft)) {
       const def = fieldDefByKey(draft.fields, key);
       if (!def || !isOptionalSchemaField(def)) continue;
@@ -53,7 +61,9 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
       row.append(
         label,
         toggleSwitch(!isHidden, `${def.label} im Detail anzeigen`, (visible) => {
-          void datasetContext.onSetFieldHidden(def.key, !visible).then(() => {
+          const latestMeta = datasetContext.getMeta();
+          if (!latestMeta) return;
+          void datasetContext.onSetFieldHidden(def.key, !visible, draft).then(() => {
             datasetContext.onRerender();
             rerender();
           });
@@ -145,32 +155,36 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
     hint("Gilt für neue Datensätze und Imports, sofern der Datensatz nichts anderes festlegt."),
   );
 
-  const hiddenDefaults = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
-  for (const key of orderedSchemaFieldKeys(draft)) {
-    const def = fieldDefByKey(draft.fields, key);
-    if (!def) continue;
-    const row = document.createElement("div");
-    row.className = "schema-editor-toggle-row";
-    const label = document.createElement("span");
-    label.className = "schema-editor-toggle-label";
-    label.textContent = def.label;
-    if (!isOptionalSchemaField(def)) {
-      const badge = document.createElement("span");
-      badge.className = "schema-editor-badge";
-      badge.textContent = "immer sichtbar";
-      row.append(label, badge);
-    } else {
-      const isHidden = hiddenDefaults.has(def.key);
-      row.append(
-        label,
-        toggleSwitch(!isHidden, `${def.label} standardmäßig anzeigen`, (visible) => {
-          toggleDraftDetailDefaultHidden(draft, def.key, !visible);
-          rerender();
-        }),
-      );
+    const hiddenDefaults = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
+    const defaultsList = document.createElement("div");
+    defaultsList.className = "schema-editor-defaults-list";
+    for (const key of orderedSchemaFieldKeys(draft)) {
+      const def = fieldDefByKey(draft.fields, key);
+      if (!def) continue;
+      const row = document.createElement("div");
+      row.className = "schema-editor-toggle-row";
+      const label = document.createElement("span");
+      label.className = "schema-editor-toggle-label";
+      label.textContent = def.label;
+      if (!isOptionalSchemaField(def)) {
+        const badge = document.createElement("span");
+        badge.className = "schema-editor-badge";
+        badge.textContent = "immer sichtbar";
+        row.append(label, badge);
+      } else {
+        const isHidden = hiddenDefaults.has(def.key);
+        const fieldKey = def.key;
+        row.append(
+          label,
+          toggleSwitch(!isHidden, `${def.label} standardmäßig anzeigen`, (visible) => {
+            toggleDraftDetailDefaultHidden(draft, fieldKey, !visible);
+            rerender();
+          }),
+        );
+      }
+      defaultsList.append(row);
     }
-    parent.append(row);
-  }
+    parent.append(defaultsList);
 }
 
 function renderContainer(
