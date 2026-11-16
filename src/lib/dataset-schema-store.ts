@@ -73,9 +73,17 @@ function ensureBuiltinTagsField(schema: DatasetSchemaDefinition): DatasetSchemaD
   let next = structuredClone(schema);
   if (!next.fields.some((f) => f.key === "tags")) {
     next.fields.push({ key: "tags", label: "Tags", dataType: "tags" });
-    for (const row of next.layout) {
-      for (const c of row.containers) {
-        if (c.fieldKeys.includes("notes") && !c.fieldKeys.includes("tags")) c.fieldKeys.push("tags");
+    const tagsPlaced = next.layout.some((row) =>
+      (row.containers ?? []).some((c) => (c.fieldKeys ?? []).includes("tags")),
+    );
+    if (!tagsPlaced) {
+      for (const row of next.layout) {
+        for (const c of row.containers ?? []) {
+          if (c.fieldKeys.includes("notes") && !c.fieldKeys.includes("tags")) {
+            c.fieldKeys.push("tags");
+            break;
+          }
+        }
       }
     }
   }

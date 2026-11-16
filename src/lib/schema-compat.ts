@@ -1,6 +1,6 @@
 import type { DatasetSchemaDefinition, SystemSchemaConfig, TableColumnDef } from "./dataset-schema-types";
 import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
-import { ensureFilesLayoutContainer } from "./detail-layout";
+import { ensureFilesLayoutContainer, isFilesLayoutContainer } from "./detail-layout";
 import {
   inferColumnSource,
   isTableColumnHidden,
@@ -37,7 +37,35 @@ function unhideCoreTableFields(hidden: Set<string>, schema: DatasetSchemaDefinit
   }
 }
 
-/** Detail-Layout: container-meta mit Kernfeldern (Editor/Import können sie entfernt haben). */
+function fieldKeysPlacedInLayout(schema: DatasetSchemaDefinition): Set<string> {
+  const placed = new Set<string>();
+  for (const row of schema.layout) {
+    for (const c of row.containers ?? []) {
+      if (isFilesLayoutContainer(c)) continue;
+      for (const k of c.fieldKeys ?? []) placed.add(k);
+    }
+  }
+  return placed;
+}
+
+/** Jedes Feld höchstens einmal im Layout. */
+export function dedupeLayoutFieldKeys(schema: DatasetSchemaDefinition): void {
+  const seen = new Set<string>();
+  for (const row of schema.layout) {
+    for (const c of row.containers ?? []) {
+      if (isFilesLayoutContainer(c)) continue;
+      const keys: string[] = [];
+      for (const k of c.fieldKeys ?? []) {
+        if (seen.has(k)) continue;
+        seen.add(k);
+        keys.push(k);
+      }
+      c.fieldKeys = keys;
+    }
+  }
+}
+
+/** Detail-Layout: Kernfelder nur ergänzen, wenn sie nirgends platziert sind. */
 export function ensureMetaDetailLayout(schema: DatasetSchemaDefinition): void {
   let metaContainer = schema.layout.flatMap((r) => r.containers ?? []).find((c) => c.id === "container-meta");
   if (!metaContainer) {
@@ -56,10 +84,22 @@ export function ensureMetaDetailLayout(schema: DatasetSchemaDefinition): void {
     }
   }
   if (!metaContainer.fieldKeys) metaContainer.fieldKeys = [];
-  for (const key of ["locId", "bezeichnung", "kategorie", "notes", "tags"]) {
-    if (schema.fields.some((f) => f.key === key) && !metaContainer.fieldKeys.includes(key)) {
-      metaContainer.fieldKeys.unshift(key);
-    }
+
+  dedupeLayoutFieldKeys(schema);
+  const placed = fieldKeysPlacedInLayout(schema);
+
+  const requireSomewhere = ["locId", "bezeichnung"] as const;
+  for (const key of requireSomewhere) {
+    if (!schema.fields.some((f) => f.key === key)) continue;
+    if (placed.has(key)) continue;
+    if (!metaContainer.fieldKeys.includes(key)) metaContainer.fieldKeys.unshift(key);
+    placed.add(key);
+  }
+
+  for (const key of ["kategorie", "notes", "tags"]) {
+    if (!schema.fields.some((f) => f.key === key)) continue;
+    if (placed.has(key)) continue;
+    if (!metaContainer.fieldKeys.includes(key)) metaContainer.fieldKeys.push(key);
   }
 }
 
