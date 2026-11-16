@@ -6,11 +6,19 @@ import { renderDatasetTagsField, renderSidebarTagFilter } from "./tag-cloud";
 import {
   DEFAULT_BEZEICHNUNG_HINT,
   displayLocId,
+  type DatasetMeta,
   type FileUserMeta,
   type MetaFileEntry,
 } from "../lib/meta-schema";
 import { isImagePath } from "../lib/fs-local";
-import { resolveSchemaForDataset, getDefaultSchema } from "../lib/dataset-schema-store";
+import {
+  resolveSchemaForDataset,
+  getDefaultSchema,
+  getDefaultSchemaId,
+  getSchemaById,
+  loadSystemSchemaConfig,
+} from "../lib/dataset-schema-store";
+import { openSchemaEditorModal } from "./schema-editor-modal";
 import type { DatasetSchemaDefinition, SchemaFieldDef } from "../lib/dataset-schema-types";
 import {
   fieldDefByKey,
@@ -22,7 +30,6 @@ import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } fro
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 import { getHiddenFieldKeySet } from "../lib/meta-hidden-fields";
 import { visibleTableColumns } from "../lib/table-layout";
-import { openLayoutModal } from "./layout-modal";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -273,8 +280,31 @@ function renderTableTagsCell(td: HTMLElement, tags: string[], maxVisible = 4): v
   td.append(wrap);
 }
 
+function tableListSchema(): DatasetSchemaDefinition {
+  const id = appState.listViewSchemaId ?? getDefaultSchemaId();
+  return getSchemaById(id) ?? getDefaultSchema();
+}
+
+function openSchemaVisibilityEditor(handlers: ShellHandlers, detailMeta?: DatasetMeta): void {
+  const scan = getSelectedScan();
+  const schemaId = detailMeta
+    ? resolveSchemaForDataset(detailMeta).id
+    : (appState.listViewSchemaId ?? getDefaultSchemaId());
+  openSchemaEditorModal(schemaId, handlers.onRerender, {
+    initialTab: "visibility",
+    datasetContext:
+      detailMeta && scan && scan.meta.locId === detailMeta.locId
+        ? {
+            meta: scan.meta,
+            onSetFieldHidden: handlers.onSetFieldHidden,
+            onRerender: handlers.onRerender,
+          }
+        : undefined,
+  });
+}
+
 function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
-  const listSchema = getDefaultSchema();
+  const listSchema = tableListSchema();
   const columns = visibleTableColumns(listSchema);
   const metaById = new Map(appState.scans.map((s) => [s.meta.locId, s.meta]));
   const sort = appState.tableSort;
@@ -328,14 +358,34 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     patchState({ tableSelection: [] });
     handlers.onRerender();
   });
+  const schemaLabel = el("label", "table-schema-picker");
+  schemaLabel.textContent = "Tabellen-Schema:";
+  const schemaSelect = el("select", "table-schema-select");
+  const cfg = loadSystemSchemaConfig();
+  const activeListId = appState.listViewSchemaId ?? getDefaultSchemaId();
+  for (const s of cfg.schemas) {
+    const opt = el("option");
+    opt.value = s.id;
+    opt.textContent = s.name;
+    if (s.id === activeListId) opt.selected = true;
+    schemaSelect.append(opt);
+  }
+  schemaSelect.disabled = !appState.ready;
+  schemaSelect.title = "Spalten und Sichtbarkeit für die Tabellenansicht";
+  schemaSelect.addEventListener("change", () => {
+    patchState({ listViewSchemaId: schemaSelect.value });
+    handlers.onRerender();
+  });
+  schemaLabel.append(schemaSelect);
+
   const layoutBtn = el("button", "btn");
   layoutBtn.type = "button";
-  layoutBtn.textContent = "Layout…";
-  layoutBtn.title = "Detail-Maske und Tabellenspalten";
+  layoutBtn.textContent = "Sichtbarkeit…";
+  layoutBtn.title = "Schema: Tabellenspalten und Detail-Maske (Systemkonfiguration)";
   layoutBtn.disabled = !appState.ready;
-  layoutBtn.addEventListener("click", () => openLayoutModal(layoutModalHandlers(handlers)));
+  layoutBtn.addEventListener("click", () => openSchemaVisibilityEditor(handlers));
 
-  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear, layoutBtn);
+  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear, schemaLabel, layoutBtn);
 
   const tableWrap = el("div", "table-wrap");
   const table = el("table", "data-table data-table--compact");
@@ -469,15 +519,6 @@ function renderIdField(parent: HTMLElement, scan: { meta: { locId: string } }, h
 
   locField.append(display);
   parent.append(locField);
-}
-
-function layoutModalHandlers(handlers: ShellHandlers) {
-  return {
-    onSetFieldHidden: handlers.onSetFieldHidden,
-    onSetTableColumnHidden: handlers.onSetTableColumnHidden,
-    onAddTableColumn: handlers.onAddTableColumn,
-    onRerender: handlers.onRerender,
-  };
 }
 
 function renderSchemaFieldInput(
@@ -953,11 +994,9 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
 
   const layoutBtn = el("button", "btn");
   layoutBtn.type = "button";
-  layoutBtn.textContent = "Layout…";
-  layoutBtn.title = "Detail-Maske und Tabellenspalten";
-  layoutBtn.addEventListener("click", () =>
-    openLayoutModal(layoutModalHandlers(handlers), { meta: scan.meta }),
-  );
+  layoutBtn.textContent = "Sichtbarkeit…";
+  layoutBtn.title = "Schema-Sichtbarkeit für diesen Datensatz und das Schema";
+  layoutBtn.addEventListener("click", () => openSchemaVisibilityEditor(handlers, scan.meta));
 
   toolbar.append(back, prev, status, next, layoutBtn, delDs);
   main.append(toolbar);
@@ -1028,8 +1067,6 @@ export type ShellHandlers = {
   onBulkSoftDelete: (locIds: string[]) => Promise<void>;
   onBulkAssignTag: (locIds: string[], tag: string) => Promise<void>;
   onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
-  onSetTableColumnHidden: (columnId: string, hidden: boolean) => Promise<void>;
-  onAddTableColumn: (candidate: import("../lib/table-layout").TableColumnCandidate) => Promise<void>;
   onUndo: () => Promise<void>;
   getFileObjectUrl: (relativePath: string) => Promise<string>;
   onRerender: () => void;

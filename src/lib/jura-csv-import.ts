@@ -1,5 +1,6 @@
 import type { DatasetScan } from "./fs-local";
 import type { DatasetMeta } from "./meta-schema";
+import type { DatasetSchemaDefinition } from "./dataset-schema-types";
 import {
   createDataset,
   scanAllDatasets,
@@ -12,12 +13,17 @@ import {
   JURA_CSV_COLUMN_KEYS,
   JURA_CSV_MATCH_KEY,
   JURA_CSV_SOURCE_ID,
-  mergeJuraFieldsIntoBuiltinSchema,
+  mergeJuraImportIntoSchema,
   type JuraCsvColumnKey,
 } from "./jura-csv-schema";
-import { upsertSchemaDefinition, getSchemaById, getDefaultSchema, resolveSchemaForDataset } from "./dataset-schema-store";
-import { setSchemaFieldHidden } from "./meta-hidden-fields";
-import { BUILTIN_SCHEMA_ID, DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
+import {
+  upsertSchemaDefinition,
+  getSchemaById,
+  getDefaultSchemaId,
+  resolveSchemaForDataset,
+} from "./dataset-schema-store";
+import { applySchemaDefaultHiddenDetailFields } from "./meta-hidden-fields";
+import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
 import { getDirectoryAtPath, writeFileInFolder } from "./workspace";
 
 const IMPORTS_DIR = "_imports";
@@ -25,6 +31,8 @@ const IMPORTS_DIR = "_imports";
 export type JuraCsvImportOptions = {
   /** Wird allen in diesem Lauf neu angelegten Datensätzen hinzugefügt (ohne Duplikate). */
   importTag?: string;
+  /** Schema, das um CSV-Felder erweitert wird und an neuen Datensätzen hängt. */
+  targetSchemaId?: string;
 };
 
 export type JuraCsvImportResult = {
@@ -60,22 +68,19 @@ function applyImportTag(meta: DatasetMeta, importTag: string | undefined): void 
   meta.tags = normalizeDatasetTags([...(meta.tags ?? []), tag]);
 }
 
-function hideImportedCsvFieldsInDetail(meta: DatasetMeta): void {
-  const schema = resolveSchemaForDataset(meta);
-  for (const key of JURA_CSV_COLUMN_KEYS) {
-    setSchemaFieldHidden(meta, schema, key, true);
-  }
-}
-
-function applyJuraRowToMeta(scan: DatasetScan, row: Partial<Record<JuraCsvColumnKey, string>>): void {
+function applyJuraRowToMeta(
+  scan: DatasetScan,
+  row: Partial<Record<JuraCsvColumnKey, string>>,
+  schemaId: string,
+): void {
   const meta = scan.meta;
+  meta.schemaKey = schemaId;
   for (const colKey of JURA_CSV_COLUMN_KEYS) {
     const val = row[colKey];
     if (val !== undefined) setMetaFieldValue(meta, colKey, val);
   }
   if (row.aktueller_name) meta.bezeichnung = row.aktueller_name.trim();
   if (row.sammlung) meta.kategorie = row.sammlung.trim();
-  if (!meta.schemaKey) meta.schemaKey = getDefaultSchema().id;
   if (!meta.data) meta.data = {};
   meta.data[JURA_CSV_SOURCE_ID] = storedPathMarker();
 }
@@ -84,10 +89,12 @@ function storedPathMarker(): string {
   return new Date().toISOString();
 }
 
-export function ensureJuraCsvSchemaInStore(): void {
-  const current = getSchemaById(BUILTIN_SCHEMA_ID) ?? structuredClone(DEFAULT_RUD_SCHEMA);
-  const merged = mergeJuraFieldsIntoBuiltinSchema(current);
+export function ensureJuraCsvSchemaInStore(schemaId?: string): DatasetSchemaDefinition {
+  const targetId = schemaId?.trim() || getDefaultSchemaId();
+  const current = getSchemaById(targetId) ?? structuredClone(DEFAULT_RUD_SCHEMA);
+  const merged = mergeJuraImportIntoSchema(current);
   upsertSchemaDefinition(merged);
+  return merged;
 }
 
 async function storeCsvInWorkspace(root: FileSystemDirectoryHandle, file: File): Promise<string> {
@@ -103,7 +110,8 @@ export async function importJuraCsvFile(
   options: JuraCsvImportOptions = {},
 ): Promise<JuraCsvImportResult> {
   const importTag = options.importTag?.trim() || undefined;
-  ensureJuraCsvSchemaInStore();
+  const schemaId = options.targetSchemaId?.trim() || getDefaultSchemaId();
+  const mergedSchema = ensureJuraCsvSchemaInStore(schemaId);
   const text = await file.text();
   const { rows } = parseJuraCsvText(text);
   const errors: string[] = [];
@@ -123,7 +131,7 @@ export async function importJuraCsvFile(
     }
     const existing = findScanByEigeneNr(scans, eigeneNr);
     if (existing) {
-      applyJuraRowToMeta(existing, row);
+      applyJuraRowToMeta(existing, row, schemaId);
       try {
         await writeMetaToFolder(existing.handle, existing.meta);
         updated++;
@@ -137,8 +145,8 @@ export async function importJuraCsvFile(
         bezeichnung: row.aktueller_name?.trim() || eigeneNr,
         kategorie: row.sammlung?.trim() || "",
       });
-      applyJuraRowToMeta(scan, row);
-      hideImportedCsvFieldsInDetail(scan.meta);
+      applyJuraRowToMeta(scan, row, schemaId);
+      applySchemaDefaultHiddenDetailFields(scan.meta, mergedSchema);
       applyImportTag(scan.meta, importTag);
       await writeMetaToFolder(scan.handle, scan.meta);
       scans = [...scans, scan];

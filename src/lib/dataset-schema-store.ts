@@ -103,6 +103,9 @@ function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefiniti
     fields: [...(base.fields ?? [])],
     tableColumns: [...(base.tableColumns ?? [])],
     ...(base.hiddenTableColumnKeys?.length ? { hiddenTableColumnKeys: [...base.hiddenTableColumnKeys] } : {}),
+    ...(base.defaultHiddenDetailFieldKeys?.length
+      ? { defaultHiddenDetailFieldKeys: [...base.defaultHiddenDetailFieldKeys] }
+      : {}),
   };
 }
 

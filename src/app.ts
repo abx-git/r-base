@@ -36,14 +36,12 @@ import { readFileAtPath } from "./lib/workspace";
 import { setMetaFieldValue } from "./lib/meta-field-access";
 import { normalizeDatasetTags } from "./lib/dataset-tags";
 import {
-  getDefaultSchema,
   installSystemSchemaConfig,
   loadSystemSchemaConfig,
   resolveSchemaForDataset,
-  upsertSchemaDefinition,
 } from "./lib/dataset-schema-store";
-import { addTableColumnToSchema, applyTableColumnHidden, type TableColumnCandidate } from "./lib/table-layout";
 import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
+import { pickSchemaIdForImport } from "./lib/schema-import-ui";
 import {
   bindProjectRoot,
   readProjectConfigFromRoot,
@@ -183,9 +181,12 @@ export function startApp(container: HTMLElement): void {
         );
         if (tagRaw === null) return;
         const importTag = tagRaw.trim();
+        const targetSchemaId = pickSchemaIdForImport();
+        if (targetSchemaId === null) return;
         try {
           const result = await importJuraCsvFile(appState.rootHandle, file, {
             importTag: importTag || undefined,
+            targetSchemaId,
           });
           await reloadFromDisk();
           const tagNote = importTag ? ` Tag „${importTag}".` : "";
@@ -340,40 +341,10 @@ export function startApp(container: HTMLElement): void {
         error: errors.length ? errors.slice(0, 6).join(" · ") : "",
       });
     },
-    onAddTableColumn: async (candidate: TableColumnCandidate) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
-      const schema = scan ? resolveSchemaForDataset(scan.meta) : getDefaultSchema();
-      const next = addTableColumnToSchema(schema, candidate);
-      upsertSchemaDefinition(next);
-      try {
-        await reloadFromDisk();
-        patchState({
-          message: `Tabellenspalte „${candidate.label}“ hinzugefügt.`,
-          error: "",
-        });
-      } catch (e) {
-        patchState({ error: e instanceof Error ? e.message : String(e) });
-      }
-    },
-    onSetTableColumnHidden: async (columnId, hidden) => {
-      const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
-      const schema = scan ? resolveSchemaForDataset(scan.meta) : getDefaultSchema();
-      const next = applyTableColumnHidden(schema, columnId, hidden);
-      upsertSchemaDefinition(next);
-      try {
-        await reloadFromDisk();
-        patchState({
-          message: hidden ? "Tabellenspalte ausgeblendet." : "Tabellenspalte eingeblendet.",
-          error: "",
-        });
-      } catch (e) {
-        patchState({ error: e instanceof Error ? e.message : String(e) });
-      }
-    },
     onSetFieldHidden: async (fieldKey, hidden) => {
       const scan = appState.scans.find((s) => s.meta.locId === appState.selectedLocId);
       if (!scan) return;
-      const schema = resolveSchemaForDataset(scan.meta) ?? getDefaultSchema();
+      const schema = resolveSchemaForDataset(scan.meta);
       setSchemaFieldHidden(scan.meta, schema, fieldKey, hidden);
       try {
         await writeMetaToFolder(scan.handle, scan.meta);

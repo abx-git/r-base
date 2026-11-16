@@ -1,7 +1,4 @@
-import {
-  getSchemaById,
-  upsertSchemaDefinition,
-} from "../lib/dataset-schema-store";
+import { getSchemaById, upsertSchemaDefinition } from "../lib/dataset-schema-store";
 import type {
   DatasetSchemaDefinition,
   FieldDataType,
@@ -10,14 +7,40 @@ import type {
   SchemaFieldDef,
   TableColumnDef,
 } from "../lib/dataset-schema-types";
+import type { DatasetMeta } from "../lib/meta-schema";
+import {
+  getHiddenFieldKeySet,
+  isOptionalSchemaField,
+  orderedSchemaFieldKeys,
+} from "../lib/meta-hidden-fields";
+import {
+  addTableColumnToSchema,
+  applyTableColumnHidden,
+  listTableColumnLayout,
+  type TableColumnCandidate,
+} from "../lib/table-layout";
+import { fieldDefByKey } from "../lib/meta-field-access";
 
-type TabId = "general" | "fields" | "table" | "layout";
+type TabId = "general" | "fields" | "table" | "layout" | "visibility";
 
-export function openSchemaEditorModal(schemaId: string, onSaved: () => void): void {
+export type SchemaEditorOpenOptions = {
+  initialTab?: TabId;
+  datasetContext?: {
+    meta: DatasetMeta;
+    onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
+    onRerender: () => void;
+  };
+};
+
+export function openSchemaEditorModal(
+  schemaId: string,
+  onSaved: () => void,
+  options?: SchemaEditorOpenOptions,
+): void {
   const existing = getSchemaById(schemaId);
   if (!existing) return;
   let draft = structuredClone(existing);
-  let tab: TabId = "general";
+  let tab: TabId = options?.initialTab ?? "general";
 
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
@@ -38,6 +61,7 @@ export function openSchemaEditorModal(schemaId: string, onSaved: () => void): vo
     { id: "fields", label: "Felder" },
     { id: "table", label: "Tabelle" },
     { id: "layout", label: "Layout" },
+    { id: "visibility", label: "Sichtbarkeit" },
   ];
 
   function setTab(next: TabId) {
@@ -295,12 +319,157 @@ export function openSchemaEditorModal(schemaId: string, onSaved: () => void): vo
     body.append(split, addRowBtn);
   }
 
+  function toggleDraftDetailDefaultHidden(fieldKey: string, hidden: boolean): void {
+    const set = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
+    if (hidden) set.add(fieldKey);
+    else set.delete(fieldKey);
+    if (set.size) draft.defaultHiddenDetailFieldKeys = [...set];
+    else delete draft.defaultHiddenDetailFieldKeys;
+  }
+
+  function toggleDraftTableColumnHidden(columnId: string, hidden: boolean): void {
+    draft = applyTableColumnHidden(draft, columnId, hidden);
+  }
+
+  function renderVisibility() {
+    body.replaceChildren();
+    body.append(
+      hint(
+        "Projektweite Vorgaben: ausgeblendete Spalten/Felder gelten für neue Imports und können pro Datensatz überschrieben werden.",
+      ),
+    );
+
+    if (options?.datasetContext) {
+      const ctx = options.datasetContext;
+      const hiddenDetail = getHiddenFieldKeySet(ctx.meta, draft);
+      const dsTitle = document.createElement("h3");
+      dsTitle.textContent = "Dieser Datensatz";
+      body.append(dsTitle);
+      const dsHint = document.createElement("p");
+      dsHint.className = "muted layout-modal-hint";
+      dsHint.textContent = "Überschreibt die Schema-Vorgabe nur für diesen Datensatz.";
+      body.append(dsHint);
+      const dsList = document.createElement("ul");
+      dsList.className = "hidden-field-reveal-list layout-modal-list";
+      for (const key of orderedSchemaFieldKeys(draft)) {
+        const def = fieldDefByKey(draft.fields, key);
+        if (!def || !isOptionalSchemaField(def)) continue;
+        const li = document.createElement("li");
+        li.className = "hidden-field-reveal-item";
+        const label = document.createElement("span");
+        label.className = "hidden-field-reveal-label";
+        label.textContent = def.label;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-mini schema-field-visibility-btn";
+        const isHidden = hiddenDetail.has(def.key);
+        btn.textContent = isHidden ? "Einblenden" : "Ausblenden";
+        btn.addEventListener("click", () => {
+          void ctx.onSetFieldHidden(def.key, !isHidden).then(() => {
+            ctx.onRerender();
+          });
+        });
+        li.append(label, btn);
+        dsList.append(li);
+      }
+      body.append(dsList);
+    }
+
+    const tableTitle = document.createElement("h3");
+    tableTitle.textContent = "Tabelle (Schema)";
+    body.append(tableTitle);
+    const { configured, available } = listTableColumnLayout(draft);
+    const tableList = document.createElement("ul");
+    tableList.className = "hidden-field-reveal-list layout-modal-list";
+    for (const row of configured) {
+      const li = document.createElement("li");
+      li.className = "hidden-field-reveal-item";
+      const label = document.createElement("span");
+      label.className = "hidden-field-reveal-label";
+      label.textContent = row.col.label;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-mini schema-field-visibility-btn";
+      btn.textContent = row.hidden ? "Einblenden" : "Ausblenden";
+      btn.addEventListener("click", () => {
+        toggleDraftTableColumnHidden(row.id, !row.hidden);
+        render();
+      });
+      li.append(label, btn);
+      tableList.append(li);
+    }
+    body.append(tableList);
+
+    if (available.length) {
+      const availTitle = document.createElement("h4");
+      availTitle.className = "layout-modal-sub";
+      availTitle.textContent = "Noch nicht in der Tabelle";
+      body.append(availTitle);
+      const availList = document.createElement("ul");
+      availList.className = "hidden-field-reveal-list layout-modal-list";
+      for (const cand of available) {
+        const li = document.createElement("li");
+        li.className = "hidden-field-reveal-item";
+        const label = document.createElement("span");
+        label.className = "hidden-field-reveal-label";
+        label.textContent = `${cand.label}${cand.source === "index" ? " (Index)" : ""}`;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-mini";
+        btn.textContent = "Spalte hinzufügen";
+        btn.addEventListener("click", () => {
+          draft = addTableColumnToSchema(draft, cand as TableColumnCandidate);
+          render();
+        });
+        li.append(label, btn);
+        availList.append(li);
+      }
+      body.append(availList);
+    }
+
+    const detailTitle = document.createElement("h3");
+    detailTitle.textContent = "Detail-Maske (Schema-Standard)";
+    body.append(detailTitle);
+    const hiddenDefaults = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
+    const detailList = document.createElement("ul");
+    detailList.className = "hidden-field-reveal-list layout-modal-list";
+    for (const key of orderedSchemaFieldKeys(draft)) {
+      const def = fieldDefByKey(draft.fields, key);
+      if (!def) continue;
+      const li = document.createElement("li");
+      li.className = "hidden-field-reveal-item";
+      const label = document.createElement("span");
+      label.className = "hidden-field-reveal-label";
+      label.textContent = def.label;
+      if (!isOptionalSchemaField(def)) {
+        const tag = document.createElement("span");
+        tag.className = "muted layout-always-tag";
+        tag.textContent = "immer";
+        li.append(label, tag);
+      } else {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-mini schema-field-visibility-btn";
+        const isHidden = hiddenDefaults.has(def.key);
+        btn.textContent = isHidden ? "Einblenden" : "Ausblenden";
+        btn.addEventListener("click", () => {
+          toggleDraftDetailDefaultHidden(def.key, !isHidden);
+          render();
+        });
+        li.append(label, btn);
+      }
+      detailList.append(li);
+    }
+    body.append(detailList);
+  }
+
   function render() {
     renderTabs();
     if (tab === "general") renderGeneral();
     else if (tab === "fields") renderFields();
     else if (tab === "table") renderTable();
-    else renderLayout();
+    else if (tab === "layout") renderLayout();
+    else renderVisibility();
   }
 
   dialog.innerHTML = `<h2>Schema bearbeiten</h2>`;

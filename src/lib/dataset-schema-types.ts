@@ -64,6 +64,8 @@ export type DatasetSchemaDefinition = {
   tableColumns: TableColumnDef[];
   /** Tabellenspalten-IDs (source:fieldKey), in der Liste ausgeblendet */
   hiddenTableColumnKeys?: string[];
+  /** Optionale Detailfelder, die neu/importiert standardmäßig ausgeblendet sind */
+  defaultHiddenDetailFieldKeys?: string[];
   /** Mitgeliefert, nicht löschbar */
   builtin?: boolean;
 };

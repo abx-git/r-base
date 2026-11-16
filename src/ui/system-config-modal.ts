@@ -7,6 +7,7 @@ import {
   upsertSchemaDefinition,
 } from "../lib/dataset-schema-store";
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
+import { DEFAULT_RUD_SCHEMA } from "../lib/dataset-schema-defaults";
 import { openSchemaEditorModal } from "./schema-editor-modal";
 
 export function openSystemConfigModal(onChanged: () => void): void {
@@ -89,9 +90,10 @@ export function openSystemConfigModal(onChanged: () => void): void {
 
   dialog.innerHTML = `
     <h2>Systemkonfiguration</h2>
-    <p class="muted">Schemata legen Felder, Validierung, Detail-Layout und Tabellenspalten fest. Gespeichert in <code>r-base.project.json</code> im Stammordner.</p>
+    <p class="muted">Schemata enthalten Felder, Detail-Layout, Tabellenspalten und Sichtbarkeit (Register „Sichtbarkeit“). Mehrere Schemata parallel – Importe wählen ein Ziel-Schema. Gespeichert in <code>r-base.project.json</code>.</p>
     <div class="schema-list" data-list></div>
     <div class="modal-actions">
+      <button type="button" class="btn" data-action="new">Neues Schema…</button>
       <button type="button" class="btn" data-action="reset">Auf Werkszustand</button>
       <button type="button" class="btn btn-primary" data-action="close">Schließen</button>
     </div>
@@ -100,6 +102,14 @@ export function openSystemConfigModal(onChanged: () => void): void {
 
   const list = dialog.querySelector<HTMLDivElement>("[data-list]")!;
   const status = dialog.querySelector<HTMLParagraphElement>("[data-status]")!;
+
+  dialog.querySelector('[data-action="new"]')?.addEventListener("click", () => {
+    const created = createNewSchema();
+    openSchemaEditorModal(created.id, () => {
+      onChanged();
+      renderList();
+    });
+  });
 
   dialog.querySelector('[data-action="close"]')?.addEventListener("click", () => {
     backdrop.remove();
@@ -123,6 +133,21 @@ export function openSystemConfigModal(onChanged: () => void): void {
   renderList();
   backdrop.append(dialog);
   document.body.append(backdrop);
+}
+
+function createNewSchema(): DatasetSchemaDefinition {
+  const cfg = loadSystemSchemaConfig();
+  let id = `schema-${Date.now()}`;
+  let n = 0;
+  while (cfg.schemas.some((s) => s.id === id)) {
+    id = `schema-${Date.now()}-${n++}`;
+  }
+  const copy = structuredClone(DEFAULT_RUD_SCHEMA);
+  copy.id = id;
+  copy.name = "Neues Schema";
+  delete copy.builtin;
+  upsertSchemaDefinition(copy);
+  return copy;
 }
 
 function duplicateSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {

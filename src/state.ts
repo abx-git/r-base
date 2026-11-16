@@ -23,6 +23,8 @@ export type AppState = {
   filterKategorie: string;
   filterTagRules: TagFilterRule[];
   tableSort: TableSortState | null;
+  /** Tabellenansicht: Spalten aus diesem Schema (null = Standardschema). */
+  listViewSchemaId: string | null;
   /** Mehrfachauswahl in der Tabellenansicht (locIds). */
   tableSelection: string[];
   view: AppView;
@@ -49,6 +51,7 @@ export const appState: AppState = {
   filterKategorie: "",
   filterTagRules: [],
   tableSort: { fieldKey: "bezeichnung", source: "meta", dir: "asc" },
+  listViewSchemaId: null,
   tableSelection: [],
   view: "table",
   selectedLocId: null,

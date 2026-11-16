@@ -1,6 +1,5 @@
-import { BUILTIN_SCHEMA_ID } from "./dataset-schema-defaults";
-import type { DatasetSchemaDefinition, SchemaFieldDef } from "./dataset-schema-types";
-import { tableColumnId } from "./table-layout";
+import type { DatasetSchemaDefinition } from "./dataset-schema-types";
+import { mergeFieldsIntoSchema } from "./schema-dynamic";
 
 /** Spalten der Rudisten-Datenbank Jura (CSV Zeile 2). */
 export const JURA_CSV_COLUMN_KEYS = [
@@ -47,18 +46,17 @@ const JURA_LABELS: Record<JuraCsvColumnKey, string> = {
   literatur_link: "Literatur-Link",
 };
 
-export const JURA_CSV_FIELD_DEFS: SchemaFieldDef[] = JURA_CSV_COLUMN_KEYS.map((key) => ({
+export const JURA_CSV_FIELD_DEFS = JURA_CSV_COLUMN_KEYS.map((key) => ({
   key,
   label: JURA_LABELS[key],
-  dataType: key === "merkmale" || key === "sonstiges" ? "text" : "string",
+  dataType: (key === "merkmale" || key === "sonstiges" ? "text" : "string") as const,
 }));
 
 export const JURA_CSV_SOURCE_ID = "rudisten-jura-csv-v1";
 
-const META_CONTAINER_ID = "container-meta";
-
-/** Entfernt alte Jura-Gruppe und hängt CSV-Felder an „Metadaten“ an. */
+/** Entfernt alte Jura-Gruppe und hängt Felder an „Metadaten“. */
 export function absorbLegacyJuraContainer(schema: DatasetSchemaDefinition): void {
+  const META_CONTAINER_ID = "container-meta";
   const meta = schema.layout.flatMap((r) => r.containers).find((c) => c.id === META_CONTAINER_ID);
   for (const row of schema.layout) {
     row.containers = row.containers.filter((c) => {
@@ -74,46 +72,16 @@ export function absorbLegacyJuraContainer(schema: DatasetSchemaDefinition): void
   schema.layout = schema.layout.filter((row) => row.containers.length > 0);
 }
 
-/**
- * Erweitert das Builtin-Schema um alle CSV-Spalten (Felder + Layout „Metadaten“).
- * Keine eigene Feldgruppe. Neue Tabellenspalten starten ausgeblendet.
- */
+export function mergeJuraImportIntoSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
+  return mergeFieldsIntoSchema(schema, JURA_CSV_FIELD_DEFS, {
+    layoutFieldKeys: JURA_CSV_COLUMN_KEYS,
+    hideNewDetailKeys: true,
+    hideNewTableColumns: true,
+    labelsForTable: JURA_LABELS,
+  });
+}
+
+/** @deprecated Alias */
 export function mergeJuraFieldsIntoBuiltinSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
-  if (schema.id !== BUILTIN_SCHEMA_ID) return schema;
-  const next = structuredClone(schema);
-  absorbLegacyJuraContainer(next);
-
-  const keys = new Set(next.fields.map((f) => f.key));
-  for (const def of JURA_CSV_FIELD_DEFS) {
-    if (!keys.has(def.key)) {
-      next.fields.push(structuredClone(def));
-      keys.add(def.key);
-    }
-  }
-
-  let meta = next.layout.flatMap((r) => r.containers).find((c) => c.id === META_CONTAINER_ID);
-  if (!meta && next.layout[0]?.containers[0]) {
-    meta = next.layout[0]!.containers[0]!;
-  }
-  if (meta) {
-    for (const k of JURA_CSV_COLUMN_KEYS) {
-      if (!meta.fieldKeys.includes(k)) meta.fieldKeys.push(k);
-    }
-  }
-
-  const hiddenCols = new Set(next.hiddenTableColumnKeys ?? []);
-  const colIds = new Set(next.tableColumns.map((c) => tableColumnId(c)));
-  for (const key of JURA_CSV_COLUMN_KEYS) {
-    const col = { fieldKey: key, label: JURA_LABELS[key], source: "meta" as const };
-    const id = tableColumnId(col);
-    if (!colIds.has(id)) {
-      next.tableColumns.push(col);
-      hiddenCols.add(id);
-      colIds.add(id);
-    }
-  }
-  if (hiddenCols.size) next.hiddenTableColumnKeys = [...hiddenCols];
-  else delete next.hiddenTableColumnKeys;
-
-  return next;
+  return mergeJuraImportIntoSchema(schema);
 }

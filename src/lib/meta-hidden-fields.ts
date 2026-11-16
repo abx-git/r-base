@@ -57,6 +57,15 @@ export function setSchemaFieldHidden(
   if (meta.data && !Object.keys(meta.data).length) delete meta.data;
 }
 
+export function applySchemaDefaultHiddenDetailFields(
+  meta: DatasetMeta,
+  schema: DatasetSchemaDefinition,
+): void {
+  for (const key of schema.defaultHiddenDetailFieldKeys ?? []) {
+    setSchemaFieldHidden(meta, schema, key, true);
+  }
+}
+
 export function orderedSchemaFieldKeys(schema: DatasetSchemaDefinition): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
