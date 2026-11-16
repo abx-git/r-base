@@ -25,8 +25,6 @@ export type AppState = {
   tableSort: TableSortState | null;
   /** Mehrfachauswahl in der Tabellenansicht (locIds). */
   tableSelection: string[];
-  /** Detail: optional Felder ein-/ausblenden bearbeiten. */
-  detailLayoutEdit: boolean;
   view: AppView;
   selectedLocId: string | null;
   syncBusy: boolean;
@@ -52,7 +50,6 @@ export const appState: AppState = {
   filterTagRules: [],
   tableSort: { fieldKey: "bezeichnung", source: "meta", dir: "asc" },
   tableSelection: [],
-  detailLayoutEdit: false,
   view: "table",
   selectedLocId: null,
   syncBusy: false,

@@ -20,16 +20,9 @@ import {
 } from "../lib/meta-field-access";
 import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
-import {
-  getHiddenFieldKeySet,
-  isOptionalSchemaField,
-  orderedSchemaFieldKeys,
-} from "../lib/meta-hidden-fields";
-import {
-  getHiddenTableColumnIdSet,
-  tableColumnId,
-  visibleTableColumns,
-} from "../lib/table-layout";
+import { getHiddenFieldKeySet } from "../lib/meta-hidden-fields";
+import { visibleTableColumns } from "../lib/table-layout";
+import { openLayoutModal } from "./layout-modal";
 
 let previewUrl: string | null = null;
 const thumbUrls = new Map<string, string>();
@@ -335,7 +328,14 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     patchState({ tableSelection: [] });
     handlers.onRerender();
   });
-  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear);
+  const layoutBtn = el("button", "btn");
+  layoutBtn.type = "button";
+  layoutBtn.textContent = "Layout…";
+  layoutBtn.title = "Detail-Maske und Tabellenspalten";
+  layoutBtn.disabled = !appState.ready;
+  layoutBtn.addEventListener("click", () => openLayoutModal(layoutModalHandlers(handlers)));
+
+  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear, layoutBtn);
 
   const tableWrap = el("div", "table-wrap");
   const table = el("table", "data-table data-table--compact");
@@ -471,11 +471,14 @@ function renderIdField(parent: HTMLElement, scan: { meta: { locId: string } }, h
   parent.append(locField);
 }
 
-type SchemaFieldLayoutCtx = {
-  layoutEdit: boolean;
-  inHiddenPanel: boolean;
-  onToggleHidden: (fieldKey: string, hidden: boolean) => void;
-};
+function layoutModalHandlers(handlers: ShellHandlers) {
+  return {
+    onSetFieldHidden: handlers.onSetFieldHidden,
+    onSetTableColumnHidden: handlers.onSetTableColumnHidden,
+    onAddTableColumn: handlers.onAddTableColumn,
+    onRerender: handlers.onRerender,
+  };
+}
 
 function renderSchemaFieldInput(
   parent: HTMLElement,
@@ -553,45 +556,11 @@ function renderSchemaFieldInput(
   parent.append(wrap);
 }
 
-function renderSchemaFieldBlock(
-  parent: HTMLElement,
-  def: SchemaFieldDef,
-  scan: { meta: import("../lib/meta-schema").DatasetMeta },
-  handlers: ShellHandlers,
-  layoutCtx?: SchemaFieldLayoutCtx,
-): void {
-  const useRowHead =
-    layoutCtx?.layoutEdit && isOptionalSchemaField(def) && layoutCtx.onToggleHidden;
-  if (!useRowHead) {
-    renderSchemaFieldInput(parent, def, scan, handlers);
-    return;
-  }
-  const row = el("div", "schema-field-row");
-  const head = el("div", "schema-field-row-head");
-  const title = el("span", "schema-field-row-title");
-  title.textContent = def.label;
-  const btn = el("button", "btn btn-mini schema-field-visibility-btn");
-  btn.type = "button";
-  btn.textContent = layoutCtx!.inHiddenPanel ? "Einblenden" : "Ausblenden";
-  btn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    layoutCtx!.onToggleHidden(def.key, !layoutCtx!.inHiddenPanel);
-  });
-  head.append(title, btn);
-  row.append(head);
-  const body = el("div", "schema-field-row-body");
-  renderSchemaFieldInput(body, def, scan, handlers, { omitLabel: true });
-  row.append(body);
-  parent.append(row);
-}
-
 type SchemaDetailFormOptions = {
   /** Nach diesem Layout-Container (z. B. Metadaten) Dateien einfügen. */
   filesInsertAfterContainerId?: string;
   renderFiles?: (parent: HTMLElement) => void;
   hiddenFieldKeys?: Set<string>;
-  layoutEdit?: boolean;
-  onToggleFieldHidden?: (fieldKey: string, hidden: boolean) => void;
 };
 
 function appendSchemaFormChunk(main: HTMLElement): HTMLDivElement {
@@ -611,14 +580,6 @@ function renderSchemaDetailForm(
   let form = appendSchemaFormChunk(main);
   let filesInserted = false;
   const hiddenKeys = options?.hiddenFieldKeys ?? new Set<string>();
-  const layoutCtx: SchemaFieldLayoutCtx | undefined =
-    options?.layoutEdit && options.onToggleFieldHidden
-      ? {
-          layoutEdit: true,
-          inHiddenPanel: false,
-          onToggleHidden: options.onToggleFieldHidden,
-        }
-      : undefined;
 
   for (const row of layout) {
     let rowEl = el("div", "schema-form-row");
@@ -637,7 +598,7 @@ function renderSchemaDetailForm(
         const def = fieldDefByKey(schema.fields, key);
         if (!def) continue;
         if (hiddenKeys.has(key)) continue;
-        renderSchemaFieldBlock(box, def, scan, handlers, layoutCtx);
+        renderSchemaFieldInput(box, def, scan, handlers);
       }
       rowEl.append(box);
 
@@ -657,82 +618,6 @@ function renderSchemaDetailForm(
   }
 
   if (options?.renderFiles && !filesInserted) options.renderFiles(main);
-}
-
-function renderHiddenSchemaFieldsSection(
-  parent: HTMLElement,
-  scan: { meta: import("../lib/meta-schema").DatasetMeta },
-  schema: DatasetSchemaDefinition,
-  handlers: ShellHandlers,
-  hiddenKeys: Set<string>,
-): void {
-  if (!appState.detailLayoutEdit) return;
-
-  const defs = orderedSchemaFieldKeys(schema)
-    .map((k) => fieldDefByKey(schema.fields, k))
-    .filter((d): d is SchemaFieldDef => Boolean(d))
-    .filter((d) => hiddenKeys.has(d.key) && isOptionalSchemaField(d));
-  if (!defs.length) return;
-
-  const section = el("section", "hidden-schema-fields");
-  const title = el("h3", "schema-container-title");
-  title.textContent = `Ausgeblendete Detailfelder (${defs.length})`;
-  const hint = el("p", "muted hidden-fields-hint");
-  hint.textContent =
-    "Diese Felder sind in der Hauptansicht nicht sichtbar. „Einblenden“ stellt sie wieder her.";
-  section.append(title, hint);
-
-  const list = el("ul", "hidden-field-reveal-list");
-  for (const def of defs) {
-    const li = el("li", "hidden-field-reveal-item");
-    const label = el("span", "hidden-field-reveal-label");
-    label.textContent = def.label;
-    const btn = el("button", "btn btn-mini");
-    btn.type = "button";
-    btn.textContent = "Einblenden";
-    btn.addEventListener("click", () => void handlers.onSetFieldHidden(def.key, false));
-    li.append(label, btn);
-    list.append(li);
-  }
-  section.append(list);
-  parent.append(section);
-}
-
-function renderTableColumnsLayoutSection(
-  parent: HTMLElement,
-  schema: DatasetSchemaDefinition,
-  handlers: ShellHandlers,
-): void {
-  if (!appState.detailLayoutEdit) return;
-
-  const columns = schema.tableColumns.length ? schema.tableColumns : [];
-  if (!columns.length) return;
-
-  const hiddenCols = getHiddenTableColumnIdSet(schema);
-  const section = el("section", "table-columns-layout");
-  const title = el("h3", "schema-container-title");
-  title.textContent = "Tabellenspalten (Projekt)";
-  const hint = el("p", "muted hidden-fields-hint");
-  hint.textContent =
-    "Gilt für die gesamte Tabelle. Ausgeblendete Spalten erscheinen dort nicht — hier nur ein- oder ausblenden.";
-  section.append(title, hint);
-
-  const list = el("ul", "hidden-field-reveal-list");
-  for (const col of columns) {
-    const id = tableColumnId(col);
-    const isHidden = hiddenCols.has(id);
-    const li = el("li", "hidden-field-reveal-item");
-    const label = el("span", "hidden-field-reveal-label");
-    label.textContent = col.label;
-    const btn = el("button", "btn btn-mini schema-field-visibility-btn");
-    btn.type = "button";
-    btn.textContent = isHidden ? "Einblenden" : "Ausblenden";
-    btn.addEventListener("click", () => void handlers.onSetTableColumnHidden(id, !isHidden));
-    li.append(label, btn);
-    list.append(li);
-  }
-  section.append(list);
-  parent.append(section);
 }
 
 function parseObsoleteFieldInput(raw: string): unknown {
@@ -1066,18 +951,15 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
     void handlers.onSoftDeleteDataset();
   });
 
-  const layoutEditBtn = el("button", "btn");
-  layoutEditBtn.type = "button";
-  layoutEditBtn.textContent = appState.detailLayoutEdit ? "Layout: Fertig" : "Layout bearbeiten";
-  layoutEditBtn.classList.toggle("btn-primary", appState.detailLayoutEdit);
-  layoutEditBtn.title =
-    "Detailfelder (Datensatz) und Tabellenspalten (Projekt) ein- oder ausblenden";
-  layoutEditBtn.addEventListener("click", () => {
-    patchState({ detailLayoutEdit: !appState.detailLayoutEdit });
-    handlers.onRerender();
-  });
+  const layoutBtn = el("button", "btn");
+  layoutBtn.type = "button";
+  layoutBtn.textContent = "Layout…";
+  layoutBtn.title = "Detail-Maske und Tabellenspalten";
+  layoutBtn.addEventListener("click", () =>
+    openLayoutModal(layoutModalHandlers(handlers), { meta: scan.meta }),
+  );
 
-  toolbar.append(back, prev, status, next, layoutEditBtn, delDs);
+  toolbar.append(back, prev, status, next, layoutBtn, delDs);
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
@@ -1086,11 +968,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
     filesInsertAfterContainerId: "container-meta",
     renderFiles: (parent) => renderDatasetFilesSection(parent, scan, handlers),
     hiddenFieldKeys: hiddenKeys,
-    layoutEdit: appState.detailLayoutEdit,
-    onToggleFieldHidden: (fieldKey, hidden) => void handlers.onSetFieldHidden(fieldKey, hidden),
   });
-  renderTableColumnsLayoutSection(main, schema, handlers);
-  renderHiddenSchemaFieldsSection(main, scan, schema, handlers, hiddenKeys);
   renderObsoleteFieldsSection(main, scan, schema, handlers);
 
   const preview = el("div", "preview-pane");
@@ -1151,6 +1029,7 @@ export type ShellHandlers = {
   onBulkAssignTag: (locIds: string[], tag: string) => Promise<void>;
   onSetFieldHidden: (fieldKey: string, hidden: boolean) => Promise<void>;
   onSetTableColumnHidden: (columnId: string, hidden: boolean) => Promise<void>;
+  onAddTableColumn: (candidate: import("../lib/table-layout").TableColumnCandidate) => Promise<void>;
   onUndo: () => Promise<void>;
   getFileObjectUrl: (relativePath: string) => Promise<string>;
   onRerender: () => void;
