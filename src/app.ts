@@ -94,7 +94,7 @@ async function connectFolder(): Promise<void> {
   await persistRootHandle(handle);
   patchState({ rootHandle: handle, rootLabel: handle.name });
   await reloadFromDisk();
-  patchState({ message: "Stammordner verbunden." });
+  patchState({ listViewSchemaId: null, message: "Stammordner verbunden." });
 }
 
 async function handleSetFieldHidden(

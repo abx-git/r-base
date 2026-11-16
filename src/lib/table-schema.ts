@@ -27,7 +27,21 @@ export function formatTableCell(
     if (!tags?.length) return "—";
     return tags.join(", ");
   }
-  if (!meta) return "—";
+  if (!meta) {
+    if (col.source === "meta") {
+      switch (col.fieldKey) {
+        case "bezeichnung":
+          return record.bezeichnung?.trim() || "—";
+        case "kategorie":
+          return record.kategorie?.trim() || "—";
+        case "locId":
+          return displayLocId(record.locId);
+        default:
+          return "—";
+      }
+    }
+    return "—";
+  }
   const v = getMetaFieldValue(meta, col.fieldKey);
   if (col.fieldKey === "locId") return displayLocId(String(v ?? meta.locId));
   if (v === null || v === undefined || v === "") return "—";

@@ -1,5 +1,6 @@
 import type { DatasetMeta } from "./meta-schema";
 import type { DatasetSchemaDefinition, SchemaFieldDef } from "./dataset-schema-types";
+import { PROTECTED_DETAIL_FIELD_KEYS } from "./schema-compat";
 
 /** Reservierter Schlüssel in meta.data — keine Nutzdaten. */
 export const HIDDEN_FIELDS_DATA_KEY = "__rBaseHiddenFields";
@@ -69,6 +70,7 @@ export function resolveDetailHiddenKeys(
   }
   for (const k of normalizeHiddenFieldKeys(meta, schema)) hidden.add(k);
   for (const k of normalizeShownFieldKeys(meta, schema)) hidden.delete(k);
+  for (const k of PROTECTED_DETAIL_FIELD_KEYS) hidden.delete(k);
   return hidden;
 }
 

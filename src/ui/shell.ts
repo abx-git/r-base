@@ -283,13 +283,7 @@ function tableListSchema(): DatasetSchemaDefinition {
   const preferred = appState.listViewSchemaId;
   if (preferred) {
     const custom = getSchemaById(preferred);
-    if (custom) {
-      const visible = visibleTableColumns(custom);
-      const hasBezeichnung = visible.some(
-        (c) => c.source === "meta" && c.fieldKey === "bezeichnung",
-      );
-      if (hasBezeichnung && visible.length >= 2) return custom;
-    }
+    if (custom) return custom;
   }
   return getDefaultSchema();
 }

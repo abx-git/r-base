@@ -5,6 +5,7 @@ import {
   createDefaultSystemSchemaConfig,
 } from "./dataset-schema-defaults";
 import { absorbLegacyJuraContainer } from "./jura-csv-schema";
+import { repairSchemaDefinition, repairSystemSchemaConfig } from "./schema-compat";
 import { getBoundProjectRoot, persistCurrentProjectConfig } from "./project-config";
 import { getWebDavSettings } from "./credentials";
 
@@ -28,16 +29,21 @@ function loadConfigFromLocalStorage(): SystemSchemaConfig {
 
 export function loadSystemSchemaConfig(): SystemSchemaConfig {
   if (activeConfig) return activeConfig;
-  return loadConfigFromLocalStorage();
+  return normalizeConfig(repairSystemSchemaConfig(loadConfigFromLocalStorage()));
 }
 
 /** Beim Öffnen des Stammordners: Projektdatei → aktive Schema-Konfiguration. */
 export function installSystemSchemaConfig(config: SystemSchemaConfig): SystemSchemaConfig {
-  const normalized = normalizeConfig(mergeWithBuiltin(config));
+  const merged = mergeWithBuiltin(config);
+  const repaired = repairSystemSchemaConfig(merged);
+  const normalized = normalizeConfig(repaired);
   activeConfig = normalized;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   } catch {
+  }
+  if (getBoundProjectRoot()) {
+    void persistCurrentProjectConfig(normalized, getWebDavSettings()).catch(() => {});
   }
   return normalized;
 }
@@ -90,9 +96,10 @@ function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefiniti
     absorbLegacyJuraContainer(next);
     base = next;
   }
+  const repaired = repairSchemaDefinition(base);
   return {
-    ...base,
-    layout: (base.layout ?? []).map((row) => ({
+    ...repaired,
+    layout: (repaired.layout ?? []).map((row) => ({
       ...row,
       containers: (row.containers ?? []).map((c) => ({
         ...c,
@@ -100,11 +107,13 @@ function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefiniti
         fieldKeys: [...(c.fieldKeys ?? [])],
       })),
     })),
-    fields: [...(base.fields ?? [])],
-    tableColumns: [...(base.tableColumns ?? [])],
-    ...(base.hiddenTableColumnKeys?.length ? { hiddenTableColumnKeys: [...base.hiddenTableColumnKeys] } : {}),
-    ...(base.defaultHiddenDetailFieldKeys?.length
-      ? { defaultHiddenDetailFieldKeys: [...base.defaultHiddenDetailFieldKeys] }
+    fields: [...(repaired.fields ?? [])],
+    tableColumns: [...(repaired.tableColumns ?? [])],
+    ...(repaired.hiddenTableColumnKeys?.length
+      ? { hiddenTableColumnKeys: [...repaired.hiddenTableColumnKeys] }
+      : {}),
+    ...(repaired.defaultHiddenDetailFieldKeys?.length
+      ? { defaultHiddenDetailFieldKeys: [...repaired.defaultHiddenDetailFieldKeys] }
       : {}),
   };
 }
