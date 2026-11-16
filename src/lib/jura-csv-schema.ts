@@ -1,5 +1,6 @@
 import { BUILTIN_SCHEMA_ID } from "./dataset-schema-defaults";
 import type { DatasetSchemaDefinition, SchemaFieldDef } from "./dataset-schema-types";
+import { tableColumnId } from "./table-layout";
 
 /** Spalten der Rudisten-Datenbank Jura (CSV Zeile 2). */
 export const JURA_CSV_COLUMN_KEYS = [
@@ -54,9 +55,34 @@ export const JURA_CSV_FIELD_DEFS: SchemaFieldDef[] = JURA_CSV_COLUMN_KEYS.map((k
 
 export const JURA_CSV_SOURCE_ID = "rudisten-jura-csv-v1";
 
+const META_CONTAINER_ID = "container-meta";
+
+/** Entfernt alte Jura-Gruppe und hängt CSV-Felder an „Metadaten“ an. */
+export function absorbLegacyJuraContainer(schema: DatasetSchemaDefinition): void {
+  const meta = schema.layout.flatMap((r) => r.containers).find((c) => c.id === META_CONTAINER_ID);
+  for (const row of schema.layout) {
+    row.containers = row.containers.filter((c) => {
+      if (c.id !== "container-jura") return true;
+      if (meta) {
+        for (const k of c.fieldKeys) {
+          if (!meta.fieldKeys.includes(k)) meta.fieldKeys.push(k);
+        }
+      }
+      return false;
+    });
+  }
+  schema.layout = schema.layout.filter((row) => row.containers.length > 0);
+}
+
+/**
+ * Erweitert das Builtin-Schema um alle CSV-Spalten (Felder + Layout „Metadaten“).
+ * Keine eigene Feldgruppe. Neue Tabellenspalten starten ausgeblendet.
+ */
 export function mergeJuraFieldsIntoBuiltinSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
   if (schema.id !== BUILTIN_SCHEMA_ID) return schema;
   const next = structuredClone(schema);
+  absorbLegacyJuraContainer(next);
+
   const keys = new Set(next.fields.map((f) => f.key));
   for (const def of JURA_CSV_FIELD_DEFS) {
     if (!keys.has(def.key)) {
@@ -64,40 +90,30 @@ export function mergeJuraFieldsIntoBuiltinSchema(schema: DatasetSchemaDefinition
       keys.add(def.key);
     }
   }
-  let container = next.layout.flatMap((r) => r.containers).find((c) => c.id === "container-jura");
-  if (!container) {
-    next.layout.push({
-      id: "row-jura",
-      containers: [
-        {
-          id: "container-jura",
-          title: "Rudisten-Datenbank Jura",
-          colSpan: 12,
-          fieldKeys: [...JURA_CSV_COLUMN_KEYS],
-        },
-      ],
-    });
-  } else {
+
+  let meta = next.layout.flatMap((r) => r.containers).find((c) => c.id === META_CONTAINER_ID);
+  if (!meta && next.layout[0]?.containers[0]) {
+    meta = next.layout[0]!.containers[0]!;
+  }
+  if (meta) {
     for (const k of JURA_CSV_COLUMN_KEYS) {
-      if (!container.fieldKeys.includes(k)) container.fieldKeys.push(k);
+      if (!meta.fieldKeys.includes(k)) meta.fieldKeys.push(k);
     }
   }
-  const colKeys = new Set(next.tableColumns.map((c) => c.fieldKey));
-  if (!colKeys.has("eigene_nr")) {
-    next.tableColumns.splice(1, 0, {
-      fieldKey: "eigene_nr",
-      label: "Eigene Nr.",
-      source: "meta",
-      width: "6rem",
-    });
+
+  const hiddenCols = new Set(next.hiddenTableColumnKeys ?? []);
+  const colIds = new Set(next.tableColumns.map((c) => tableColumnId(c)));
+  for (const key of JURA_CSV_COLUMN_KEYS) {
+    const col = { fieldKey: key, label: JURA_LABELS[key], source: "meta" as const };
+    const id = tableColumnId(col);
+    if (!colIds.has(id)) {
+      next.tableColumns.push(col);
+      hiddenCols.add(id);
+      colIds.add(id);
+    }
   }
-  if (!colKeys.has("aktueller_name")) {
-    const idx = next.tableColumns.findIndex((c) => c.fieldKey === "eigene_nr");
-    next.tableColumns.splice(idx >= 0 ? idx + 1 : 1, 0, {
-      fieldKey: "aktueller_name",
-      label: "Aktueller Name",
-      source: "meta",
-    });
-  }
+  if (hiddenCols.size) next.hiddenTableColumnKeys = [...hiddenCols];
+  else delete next.hiddenTableColumnKeys;
+
   return next;
 }

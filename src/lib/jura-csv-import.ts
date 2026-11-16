@@ -15,7 +15,8 @@ import {
   mergeJuraFieldsIntoBuiltinSchema,
   type JuraCsvColumnKey,
 } from "./jura-csv-schema";
-import { upsertSchemaDefinition, getSchemaById, getDefaultSchema } from "./dataset-schema-store";
+import { upsertSchemaDefinition, getSchemaById, getDefaultSchema, resolveSchemaForDataset } from "./dataset-schema-store";
+import { setSchemaFieldHidden } from "./meta-hidden-fields";
 import { BUILTIN_SCHEMA_ID, DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
 import { getDirectoryAtPath, writeFileInFolder } from "./workspace";
 
@@ -57,6 +58,13 @@ function applyImportTag(meta: DatasetMeta, importTag: string | undefined): void 
   const tag = importTag?.trim();
   if (!tag) return;
   meta.tags = normalizeDatasetTags([...(meta.tags ?? []), tag]);
+}
+
+function hideImportedCsvFieldsInDetail(meta: DatasetMeta): void {
+  const schema = resolveSchemaForDataset(meta);
+  for (const key of JURA_CSV_COLUMN_KEYS) {
+    setSchemaFieldHidden(meta, schema, key, true);
+  }
 }
 
 function applyJuraRowToMeta(scan: DatasetScan, row: Partial<Record<JuraCsvColumnKey, string>>): void {
@@ -130,6 +138,7 @@ export async function importJuraCsvFile(
         kategorie: row.sammlung?.trim() || "",
       });
       applyJuraRowToMeta(scan, row);
+      hideImportedCsvFieldsInDetail(scan.meta);
       applyImportTag(scan.meta, importTag);
       await writeMetaToFolder(scan.handle, scan.meta);
       scans = [...scans, scan];

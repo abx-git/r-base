@@ -4,7 +4,7 @@ import {
   DEFAULT_RUD_SCHEMA,
   createDefaultSystemSchemaConfig,
 } from "./dataset-schema-defaults";
-import { mergeJuraFieldsIntoBuiltinSchema } from "./jura-csv-schema";
+import { absorbLegacyJuraContainer } from "./jura-csv-schema";
 import { getBoundProjectRoot, persistCurrentProjectConfig } from "./project-config";
 import { getWebDavSettings } from "./credentials";
 
@@ -85,7 +85,11 @@ function ensureBuiltinTagsField(schema: DatasetSchemaDefinition): DatasetSchemaD
 function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefinition {
   const colSpan = (n?: number) => (typeof n === "number" && n >= 1 && n <= 12 ? n : 12);
   let base = schema.id === BUILTIN_SCHEMA_ID ? ensureBuiltinTagsField(schema) : schema;
-  if (base.id === BUILTIN_SCHEMA_ID) base = mergeJuraFieldsIntoBuiltinSchema(base);
+  if (base.id === BUILTIN_SCHEMA_ID) {
+    const next = structuredClone(base);
+    absorbLegacyJuraContainer(next);
+    base = next;
+  }
   return {
     ...base,
     layout: (base.layout ?? []).map((row) => ({
