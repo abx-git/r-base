@@ -4,6 +4,7 @@ import { ensureFilesLayoutContainer, isFilesLayoutContainer } from "./detail-lay
 import {
   inferColumnSource,
   isTableColumnHidden,
+  PROTECTED_TABLE_FIELD_KEYS,
   resolveHiddenTableColumnIds,
   tableColumnId,
 } from "./table-layout";
@@ -13,7 +14,6 @@ export const PROTECTED_DETAIL_FIELD_KEYS = new Set(["locId", "bezeichnung"]);
 
 const CORE_TABLE_COLUMNS: TableColumnDef[] = DEFAULT_RUD_SCHEMA.tableColumns.map((c) => ({ ...c }));
 
-const CORE_TABLE_FIELD_KEYS = new Set(CORE_TABLE_COLUMNS.map((c) => c.fieldKey));
 
 function normalizeTableColumnDefs(schema: DatasetSchemaDefinition): void {
   if (!schema.tableColumns.length) {
@@ -25,16 +25,23 @@ function normalizeTableColumnDefs(schema: DatasetSchemaDefinition): void {
   }
 }
 
-function unhideCoreTableFields(hidden: Set<string>, schema: DatasetSchemaDefinition): void {
+function unhideProtectedTableColumns(hidden: Set<string>, schema: DatasetSchemaDefinition): void {
   const cols = schema.tableColumns.length ? schema.tableColumns : CORE_TABLE_COLUMNS;
-  for (const fieldKey of CORE_TABLE_FIELD_KEYS) {
+  for (const fieldKey of PROTECTED_TABLE_FIELD_KEYS) {
     for (const key of [...hidden]) {
       if (key === fieldKey || key.endsWith(`:${fieldKey}`)) hidden.delete(key);
     }
-    for (const col of cols.filter((c) => c.fieldKey === fieldKey)) {
+    for (const col of cols.filter((c) => c.fieldKey === fieldKey && c.source !== "index")) {
       hidden.delete(tableColumnId(col));
     }
   }
+}
+
+function ensureAtLeastOneVisibleTableColumn(hidden: Set<string>, schema: DatasetSchemaDefinition): void {
+  const cols = schema.tableColumns.length ? schema.tableColumns : CORE_TABLE_COLUMNS;
+  const visibleCount = cols.filter((c) => !isTableColumnHidden(c, hidden)).length;
+  if (visibleCount > 0) return;
+  unhideProtectedTableColumns(hidden, schema);
 }
 
 function fieldKeysPlacedInLayout(schema: DatasetSchemaDefinition): Set<string> {
@@ -128,9 +135,8 @@ export function repairSchemaDefinition(schema: DatasetSchemaDefinition): Dataset
   }
 
   const hidden = resolveHiddenTableColumnIds(next, next.hiddenTableColumnKeys);
-  unhideCoreTableFields(hidden, next);
-  const visibleCount = next.tableColumns.filter((c) => !isTableColumnHidden(c, hidden)).length;
-  if (visibleCount < 2) unhideCoreTableFields(hidden, next);
+  unhideProtectedTableColumns(hidden, next);
+  ensureAtLeastOneVisibleTableColumn(hidden, next);
   if (hidden.size) next.hiddenTableColumnKeys = [...hidden];
   else delete next.hiddenTableColumnKeys;
 

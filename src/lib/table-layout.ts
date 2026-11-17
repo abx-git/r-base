@@ -1,6 +1,13 @@
 import type { DatasetSchemaDefinition, TableColumnDef } from "./dataset-schema-types";
 import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
 
+/** Spalten, die in der Tabelle nicht dauerhaft ausgeblendet werden können. */
+export const PROTECTED_TABLE_FIELD_KEYS = new Set(["locId", "bezeichnung"]);
+
+export function isProtectedTableColumn(col: TableColumnDef): boolean {
+  return col.source !== "index" && PROTECTED_TABLE_FIELD_KEYS.has(col.fieldKey);
+}
+
 export const INDEX_TABLE_FIELDS: { fieldKey: string; label: string; source: "index" }[] = [
   { fieldKey: "fileCount", label: "Dateien", source: "index" },
   { fieldKey: "syncStatus", label: "Sync", source: "index" },
@@ -71,16 +78,14 @@ export function visibleTableColumns(schema: DatasetSchemaDefinition): TableColum
   const hidden = getHiddenTableColumnIdSet(schema);
   const cols = schema.tableColumns.length ? schema.tableColumns : [...DEFAULT_RUD_SCHEMA.tableColumns];
   let visible = cols.filter((c) => !isTableColumnHidden(c, hidden));
-  if (visible.length < 2) {
-    const fallback = DEFAULT_RUD_SCHEMA.tableColumns.filter(
-      (c) => !isTableColumnHidden(c, hidden),
+  if (!visible.length) {
+    const preferred = cols.filter(
+      (c) => PROTECTED_TABLE_FIELD_KEYS.has(c.fieldKey) && !isTableColumnHidden(c, hidden),
     );
-    if (fallback.length >= 2) visible = fallback;
-    else {
-      visible = DEFAULT_RUD_SCHEMA.tableColumns.filter((c) =>
-        ["locId", "bezeichnung", "kategorie", "tags"].includes(c.fieldKey),
-      );
-    }
+    visible =
+      preferred.length > 0
+        ? preferred
+        : DEFAULT_RUD_SCHEMA.tableColumns.filter((c) => PROTECTED_TABLE_FIELD_KEYS.has(c.fieldKey));
   }
   return visible;
 }

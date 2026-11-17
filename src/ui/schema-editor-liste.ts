@@ -2,6 +2,7 @@ import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 import {
   addTableColumnToSchema,
   applyTableColumnHidden,
+  isProtectedTableColumn,
   listTableColumnLayout,
   tableColumnId,
   type TableColumnCandidate,
@@ -67,19 +68,44 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
     }
     keySel.value = col.fieldKey;
     keySel.addEventListener("change", () => {
-      const pick = columnKeyOptions(ctx.getDraft()).find((o) => o.key === keySel.value);
-      col.fieldKey = keySel.value;
-      col.source = pick?.source ?? "meta";
+      const d = ctx.getDraft();
+      const current = d.tableColumns[idx]!;
+      const oldId = tableColumnId(current);
+      const pick = columnKeyOptions(d).find((o) => o.key === keySel.value);
+      current.fieldKey = keySel.value;
+      current.source = pick?.source ?? "meta";
+      const newId = tableColumnId(current);
+      if (oldId !== newId && d.hiddenTableColumnKeys?.length) {
+        const hid = new Set(d.hiddenTableColumnKeys);
+        if (hid.has(oldId)) {
+          hid.delete(oldId);
+          hid.add(newId);
+        }
+        if (hid.size) d.hiddenTableColumnKeys = [...hid];
+        else delete d.hiddenTableColumnKeys;
+      }
+      ctx.rerender();
     });
 
     const visCell = document.createElement("div");
-    visCell.append(
-      toggleSwitch(!hidden, `Spalte ${col.label} sichtbar`, (visible) => {
-        const next = applyTableColumnHidden(ctx.getDraft(), colId, !visible);
-        ctx.setDraft(next);
-        ctx.rerender();
-      }),
-    );
+    const protectedCol = isProtectedTableColumn(col);
+    if (protectedCol) {
+      const tag = document.createElement("span");
+      tag.className = "schema-editor-badge";
+      tag.textContent = "immer sichtbar";
+      visCell.append(tag);
+    } else {
+      visCell.append(
+        toggleSwitch(!hidden, `Spalte ${col.label} sichtbar`, (visible) => {
+          const d = ctx.getDraft();
+          const current = d.tableColumns[idx]!;
+          const id = tableColumnId(current);
+          const next = applyTableColumnHidden(d, id, !visible);
+          ctx.setDraft(next);
+          ctx.rerender();
+        }),
+      );
+    }
 
     const del = mkBtn("×", false, () => {
       const d = ctx.getDraft();
