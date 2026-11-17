@@ -218,24 +218,6 @@ export async function buildSchemaPdf(
     doc.text(`${datasets.length} Datensätze`, MARGIN, MARGIN + 48);
     doc.text(`Export: ${exportStamp}`, MARGIN, MARGIN + 56);
     doc.text("Layout: Exportformular", MARGIN, MARGIN + 64);
-
-    if (datasets.length) {
-      y = MARGIN + 76;
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      setAccent();
-      doc.text("Inhalt", MARGIN, y);
-      y += 5;
-      doc.setFont("helvetica", "normal");
-      setMuted();
-      for (const s of datasets.slice(0, 12)) {
-        const line = `${displayLocId(s.meta.locId)}  ·  ${s.meta.bezeichnung.trim() || "—"}`;
-        const parts = doc.splitTextToSize(line, CONTENT_W);
-        doc.text(parts, MARGIN, y);
-        y += parts.length * 3.6 + 1.5;
-        if (y > BODY_BOTTOM - 20) break;
-      }
-    }
   }
 
   if (!datasets.length) {
@@ -248,6 +230,7 @@ export async function buildSchemaPdf(
   }
 
   const blocks = exportBlocksForSchema(schema);
+  const sheetPageByLoc = new Map<string, number>();
 
   for (const scan of datasets) {
     const meta = scan.meta;
@@ -255,6 +238,7 @@ export async function buildSchemaPdf(
     const locLabel = displayLocId(meta.locId);
     sheetFooter = locLabel;
     y = newPage(locLabel);
+    sheetPageByLoc.set(scan.meta.locId, pageNum);
 
     setMuted();
     doc.setFont("helvetica", "normal");
@@ -361,6 +345,42 @@ export async function buildSchemaPdf(
     }
 
     y += 4;
+  }
+
+  if (includeCover && datasets.length) {
+    const LINK_COLOR: [number, number, number] = [37, 99, 235];
+    const lineAdvance = 4.2;
+    doc.setPage(1);
+    let tocY = MARGIN + 76;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    setAccent();
+    doc.text("Inhalt", MARGIN, tocY);
+    tocY += 5;
+    doc.setFont("helvetica", "normal");
+
+    let listed = 0;
+    for (const s of datasets) {
+      if (tocY > BODY_BOTTOM - 8) break;
+      const target = sheetPageByLoc.get(s.meta.locId);
+      if (!target) continue;
+      const bez = s.meta.bezeichnung.trim() || "—";
+      const line = `${displayLocId(s.meta.locId)}  ·  ${bez}  (${target})`;
+      const parts = doc.splitTextToSize(line, CONTENT_W) as string[];
+      for (const part of parts) {
+        if (tocY > BODY_BOTTOM - 8) break;
+        doc.setTextColor(...LINK_COLOR);
+        doc.textWithLink(part, MARGIN, tocY, { pageNumber: target, maxWidth: CONTENT_W });
+        tocY += lineAdvance;
+      }
+      tocY += 1.2;
+      listed += 1;
+    }
+    setMuted();
+    if (listed < datasets.length) {
+      doc.text(`… und ${datasets.length - listed} weitere (ohne Verknüpfung)`, MARGIN, tocY);
+    }
+    setInk();
   }
 
   return doc.output("blob");
