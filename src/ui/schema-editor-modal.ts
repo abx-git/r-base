@@ -5,6 +5,7 @@ import type { DatasetMeta } from "../lib/meta-schema";
 import { renderDetailformular } from "./schema-editor-detail";
 import { renderExportformular } from "./schema-editor-export";
 import { renderFeldkatalog } from "./schema-editor-felder";
+import { renderExcelExportTab } from "./schema-editor-excel";
 import { renderListenansicht } from "./schema-editor-liste";
 import { attachDirtyCheck, createSchemaEditorShell } from "./schema-editor-shell";
 import { renderStammdaten } from "./schema-editor-stammdaten";
@@ -74,6 +75,15 @@ export function openSchemaEditorModal(
         break;
       case "liste":
         renderListenansicht(parent, {
+          getDraft: () => draft,
+          setDraft: (next) => {
+            draft = next;
+          },
+          rerender: renderBody,
+        });
+        break;
+      case "excel":
+        renderExcelExportTab(parent, {
           getDraft: () => draft,
           setDraft: (next) => {
             draft = next;

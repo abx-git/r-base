@@ -32,7 +32,8 @@ import {
 } from "./lib/db-index";
 import { hasWebDavCredentials } from "./lib/credentials";
 import { runWebDavSync, pendingLocalChanges } from "./lib/webdav-sync";
-import { downloadBlob, exportMetadataXlsx, importMetadataXlsx } from "./lib/excel-io";
+import { downloadBlob, importMetadataXlsx } from "./lib/excel-io";
+import { openSchemaExcelExportModal } from "./ui/excel-export-modal";
 import { importJuraCsvFile } from "./lib/jura-csv-import";
 import { readFileAtPath } from "./lib/workspace";
 import { setMetaFieldValue } from "./lib/meta-field-access";
@@ -45,6 +46,7 @@ import {
 } from "./lib/dataset-schema-store";
 import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
 import { pickSchemaIdForImport } from "./lib/schema-import-ui";
+import { openSchemaHtmlExportModal } from "./ui/schema-html-export-modal";
 import { openSchemaPdfExportModal } from "./ui/schema-export-modal";
 import { filterScansByRecordFilter } from "./lib/record-filter";
 import {
@@ -207,14 +209,29 @@ export function startApp(container: HTMLElement): void {
       }
     },
     onExcelExport: () => {
-      const blob = exportMetadataXlsx(appState.scans);
-      downloadBlob(blob, `r-base-metadaten-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      if (!appState.ready) return;
+      const filter = { query: appState.filterQuery, tagRules: appState.filterTagRules };
+      const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
+      openSchemaExcelExportModal(scans, appState.records, filter, (msg, isError) => {
+        patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
+      });
     },
     onSchemaPdfExport: () => {
       if (!appState.ready) return;
       const filter = { query: appState.filterQuery, tagRules: appState.filterTagRules };
       const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
       openSchemaPdfExportModal(scans, filter, (msg, isError) => {
+        patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
+      });
+    },
+    onSchemaHtmlExport: () => {
+      if (!appState.ready || !appState.rootHandle) {
+        patchState({ error: "Zuerst Stammordner mit Schreibzugriff wählen.", message: "" });
+        return;
+      }
+      const filter = { query: appState.filterQuery, tagRules: appState.filterTagRules };
+      const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
+      openSchemaHtmlExportModal(appState.rootHandle, scans, filter, (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
       });
     },

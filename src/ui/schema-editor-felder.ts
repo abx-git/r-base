@@ -1,4 +1,4 @@
-import { syncTableColumnsWithFieldCatalog } from "../lib/field-placement-editor";
+import { syncExcelColumnsWithFieldCatalog, syncTableColumnsWithFieldCatalog } from "../lib/field-placement-editor";
 import { persistSchemaDefinition } from "../lib/schema-editor-persist";
 import type { DatasetSchemaDefinition, FieldDataType } from "../lib/dataset-schema-types";
 import {
@@ -79,6 +79,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
       dataType: "string",
     });
     syncTableColumnsWithFieldCatalog(draft);
+    syncExcelColumnsWithFieldCatalog(draft);
     keyIn.value = "";
     labelIn.value = "";
     if (!persistFeldkatalog()) return;
@@ -106,6 +107,11 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
         field.label = labelCell.value;
         for (const col of draft.tableColumns) {
           if (col.fieldKey === field.key && col.source !== "index") col.label = field.label;
+        }
+        if (draft.excelColumns?.length) {
+          for (const col of draft.excelColumns) {
+            if (col.fieldKey === field.key && col.source !== "index") col.label = field.label;
+          }
         }
       });
 

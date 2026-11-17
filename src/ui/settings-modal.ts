@@ -61,6 +61,7 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
         <button type="button" class="btn" data-action="system-config">Schemata verwalten…</button>
         <button type="button" class="btn" data-action="edit-liste">Listenansicht…</button>
         <button type="button" class="btn" data-action="edit-detail">Detailformular…</button>
+        <button type="button" class="btn" data-action="edit-excel">Excel-Export…</button>
         <button type="button" class="btn" data-action="edit-export">Exportformular…</button>
       </div>
       <div class="settings-btn-row" data-dataset-row hidden>
@@ -125,7 +126,7 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
 
   const schemaIdFromListSelect = () => listSchemaSelect.value || getDefaultSchemaId();
 
-  const openEditor = (initialTab: "liste" | "detail" | "export", withDataset: boolean) => {
+  const openEditor = (initialTab: "liste" | "excel" | "detail" | "export", withDataset: boolean) => {
     const schemaId = withDataset && selectedScan
       ? resolveSchemaForDataset(selectedScan.meta).id
       : schemaIdFromListSelect();
@@ -166,6 +167,10 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
 
   dialog.querySelector('[data-action="edit-detail"]')?.addEventListener("click", () => {
     openEditor("detail", false);
+  });
+
+  dialog.querySelector('[data-action="edit-excel"]')?.addEventListener("click", () => {
+    openEditor("excel", false);
   });
 
   dialog.querySelector('[data-action="edit-export"]')?.addEventListener("click", () => {

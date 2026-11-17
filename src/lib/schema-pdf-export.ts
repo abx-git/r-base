@@ -1,12 +1,16 @@
 import type { DatasetScan } from "./fs-local";
 import { isImagePath, readFileAtPath } from "./fs-local";
-import type { DatasetSchemaDefinition, SchemaFieldDef } from "./dataset-schema-types";
-import { resolveSchemaForDataset } from "./dataset-schema-store";
+import type { DatasetSchemaDefinition } from "./dataset-schema-types";
 import { exportBlocksForSchema } from "./export-placement-editor";
-import { isExportFieldVisibleInSchema } from "./export-field-visibility";
-import { fieldDefByKey, formatFieldForInput, getMetaFieldValue } from "./meta-field-access";
+import { fieldDefByKey } from "./meta-field-access";
 import { displayLocId } from "./meta-schema";
 import { formatObsoleteValue, listObsoleteFields } from "./meta-obsolete-fields";
+import {
+  filterExportFieldKeys,
+  formatExportFieldValue,
+  isEmptyExportValue,
+  scansForSchemaExport,
+} from "./schema-export-shared";
 
 export type SchemaPdfExportOptions = {
   omitEmptyOptional?: boolean;
@@ -33,61 +37,6 @@ const THEME: PdfTheme = {
   line: [228, 228, 231],
   accent: [39, 39, 42],
 };
-
-function scansForSchema(scans: DatasetScan[], schema: DatasetSchemaDefinition): DatasetScan[] {
-  return scans
-    .filter((s) => resolveSchemaForDataset(s.meta).id === schema.id)
-    .sort((a, b) => a.meta.locId.localeCompare(b.meta.locId, "de", { numeric: true }));
-}
-
-function formatFieldValue(def: SchemaFieldDef | undefined, meta: DatasetScan["meta"], key: string): string {
-  if (!def) {
-    const raw = getMetaFieldValue(meta, key);
-    return raw === null || raw === undefined || raw === "" ? "—" : String(raw);
-  }
-  const v = getMetaFieldValue(meta, def.key);
-  if (def.key === "locId") return displayLocId(String(v ?? meta.locId));
-  if (v === null || v === undefined || v === "") return "—";
-  if (def.dataType === "boolean") return v ? "Ja" : "Nein";
-  if (Array.isArray(v)) return v.map(String).join(", ");
-  if (def.dataType === "date" && typeof v === "string") {
-    const d = v.slice(0, 10);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-      try {
-        return new Date(`${d}T12:00:00`).toLocaleDateString("de-DE", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        });
-      } catch {
-        return d;
-      }
-    }
-  }
-  return formatFieldForInput(def.dataType, v) || "—";
-}
-
-function isEmptyValue(text: string): boolean {
-  const t = text.trim();
-  return !t || t === "—";
-}
-
-function filterExportKeys(
-  schema: DatasetSchemaDefinition,
-  meta: DatasetScan["meta"],
-  keys: string[],
-  omitEmpty: boolean,
-): string[] {
-  return keys.filter((key) => {
-    if (!isExportFieldVisibleInSchema(schema, key)) return false;
-    if (!omitEmpty) return true;
-    const def = fieldDefByKey(schema.fields, key);
-    const text = formatFieldValue(def, meta, key);
-    if (!def) return !isEmptyValue(text);
-    if (def.constraints?.required || def.key === "locId" || def.key === "bezeichnung") return true;
-    return !isEmptyValue(text);
-  });
-}
 
 type ImagePayload = { dataUrl: string; format: "JPEG" | "PNG"; w: number; h: number };
 
@@ -123,7 +72,7 @@ export async function buildSchemaPdf(
   const { jsPDF } = await import("jspdf");
   const omitEmpty = options.omitEmptyOptional !== false;
   const includeCover = options.includeCover !== false;
-  const datasets = scansForSchema(scans, schema);
+  const datasets = scansForSchemaExport(scans, schema);
   const exportStamp = new Date().toLocaleString("de-DE");
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
 
@@ -261,21 +210,21 @@ export async function buildSchemaPdf(
 
     for (const block of blocks) {
       if (block.kind === "fields") {
-        const keys = filterExportKeys(schema, meta, block.fieldKeys, omitEmpty);
+        const keys = filterExportFieldKeys(schema, meta, block.fieldKeys, omitEmpty);
         if (!keys.length) continue;
         if (block.title?.trim()) drawSectionTitle(block.title.trim());
         for (const key of keys) {
           if (key === "bezeichnung") continue;
           const def = fieldDefByKey(schema.fields, key);
-          drawFieldRow(def?.label ?? key, formatFieldValue(def, meta, key), key === "locId");
+          drawFieldRow(def?.label ?? key, formatExportFieldValue(def, meta, key), key === "locId");
         }
       } else if (block.kind === "unplaced") {
-        const keys = filterExportKeys(schema, meta, block.fieldKeys, omitEmpty);
+        const keys = filterExportFieldKeys(schema, meta, block.fieldKeys, omitEmpty);
         if (!keys.length) continue;
         drawSectionTitle("Nicht platziert");
         for (const key of keys) {
           const def = fieldDefByKey(schema.fields, key);
-          drawFieldRow(def?.label ?? key, formatFieldValue(def, meta, key), key === "locId");
+          drawFieldRow(def?.label ?? key, formatExportFieldValue(def, meta, key), key === "locId");
         }
       } else if (block.kind === "files") {
         const images = meta.files.filter((f) => isImagePath(f.path));
@@ -333,7 +282,7 @@ export async function buildSchemaPdf(
         y += 2;
       } else if (block.kind === "obsolete") {
         const obsolete = listObsoleteFields(meta, schema).filter(
-          (e) => !isEmptyValue(formatObsoleteValue(e.value)),
+          (e) => !isEmptyExportValue(formatObsoleteValue(e.value)),
         );
         if (!obsolete.length) continue;
         const sectionTitle = block.title?.trim() || "Felder außerhalb des Schemas";

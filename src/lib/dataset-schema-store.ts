@@ -120,6 +120,12 @@ function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefiniti
     ...(repaired.hiddenTableColumnKeys?.length
       ? { hiddenTableColumnKeys: [...repaired.hiddenTableColumnKeys] }
       : {}),
+    ...(repaired.excelColumns?.length
+      ? { excelColumns: [...repaired.excelColumns] }
+      : {}),
+    ...(repaired.hiddenExcelColumnKeys?.length
+      ? { hiddenExcelColumnKeys: [...repaired.hiddenExcelColumnKeys] }
+      : {}),
     ...(repaired.defaultHiddenDetailFieldKeys?.length
       ? { defaultHiddenDetailFieldKeys: [...repaired.defaultHiddenDetailFieldKeys] }
       : {}),

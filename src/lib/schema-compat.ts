@@ -1,6 +1,7 @@
 import type { DatasetSchemaDefinition, SystemSchemaConfig, TableColumnDef } from "./dataset-schema-types";
 import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
 import { ensureFilesLayoutContainer, isFilesLayoutContainer } from "./detail-layout";
+import { ensureExcelColumnsInitialized } from "./excel-layout";
 import { ensureExportLayoutInitialized, ensureFilesInExportLayout } from "./export-layout";
 import {
   inferColumnSource,
@@ -159,6 +160,7 @@ export function repairSchemaDefinition(schema: DatasetSchemaDefinition): Dataset
   ensureFilesLayoutContainer(next);
   ensureExportLayoutInitialized(next);
   ensureFilesInExportLayout(next);
+  ensureExcelColumnsInitialized(next);
 
   if (!next.layout.length) next.layout = structuredClone(defaults.layout);
 

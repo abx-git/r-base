@@ -244,6 +244,13 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   pdfExport.title = "Alle Datensätze eines Schemas als PDF-Datenblätter";
   pdfExport.addEventListener("click", () => handlers.onSchemaPdfExport());
 
+  const htmlExport = el("button", "btn");
+  htmlExport.type = "button";
+  htmlExport.textContent = "Schema-HTML…";
+  htmlExport.disabled = !appState.ready;
+  htmlExport.title = "Statische Website im Stammordner (_exports/html/…)";
+  htmlExport.addEventListener("click", () => handlers.onSchemaHtmlExport());
+
   const settingsBtn = el("button", "btn");
   settingsBtn.type = "button";
   settingsBtn.textContent = "Einstellungen";
@@ -260,9 +267,9 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   panel.setAttribute("role", "menu");
   panel.tabIndex = -1;
 
-  panel.append(folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, settingsBtn);
+  panel.append(folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, htmlExport, settingsBtn);
 
-  for (const btn of [folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, settingsBtn]) {
+  for (const btn of [folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, htmlExport, settingsBtn]) {
     btn.classList.add("chrome-menu-item");
     btn.setAttribute("role", "menuitem");
   }
@@ -1257,6 +1264,7 @@ export type ShellHandlers = {
   onExcelImport: () => void;
   onCsvImport: () => void;
   onSchemaPdfExport: () => void;
+  onSchemaHtmlExport: () => void;
   onOpenSettings: () => void;
   onNewDataset: () => Promise<void>;
   onMetaChange: (partial: { bezeichnung?: string; kategorie?: string; notes?: string }) => Promise<void>;

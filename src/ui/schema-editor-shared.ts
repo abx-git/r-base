@@ -11,7 +11,7 @@ import { isExportFieldVisibleInSchema } from "../lib/export-field-visibility";
 import { consolidateExportLayout, ensureExportLayoutRow, findExportContainer } from "../lib/export-layout";
 import { validateSchemaDefinition } from "../lib/schema-validation";
 
-export type SchemaEditorTabId = "stammdaten" | "felder" | "liste" | "detail" | "export";
+export type SchemaEditorTabId = "stammdaten" | "felder" | "liste" | "excel" | "detail" | "export";
 
 /** Legacy + neue Tab-IDs aus Aufrufern */
 export type SchemaEditorInitialTab =
@@ -30,6 +30,7 @@ export const SCHEMA_EDITOR_TABS: {
   { id: "stammdaten", label: "Stammdaten", description: "Name, ID-Präfix, Version" },
   { id: "felder", label: "Feldkatalog", description: "Felder anlegen: Label, Typ, Pflicht" },
   { id: "liste", label: "Listenansicht", description: "Tabellen-Spalten & Reihenfolge" },
+  { id: "excel", label: "Excel-Export", description: "Spalten für .xlsx-Export" },
   { id: "detail", label: "Detailformular", description: "Detail-Sichtbarkeit & Layout" },
   { id: "export", label: "Exportformular", description: "PDF-Export: Felder, Anordnung & Bilder" },
 ];
@@ -44,7 +45,7 @@ export function mapInitialTab(
     return hasDatasetContext ? "detail" : "liste";
   }
   if (raw === "layout") return "detail";
-  if (raw === "stammdaten" || raw === "felder" || raw === "liste" || raw === "detail" || raw === "export") return raw;
+  if (raw === "stammdaten" || raw === "felder" || raw === "liste" || raw === "excel" || raw === "detail" || raw === "export") return raw;
   return "stammdaten";
 }
 
@@ -54,6 +55,7 @@ export function isDraftDirty(a: DatasetSchemaDefinition, b: DatasetSchemaDefinit
 
 export function validationErrorTab(err: string | null): SchemaEditorTabId | null {
   if (!err) return null;
+  if (err.includes("Excel-Spalte")) return "excel";
   if (err.includes("Tabellenspalte")) return "liste";
   if (err.includes("Layout")) return "detail";
   if (err.includes("Feld") || err.includes("Key")) return "felder";
@@ -135,12 +137,21 @@ export { consolidateExportLayout, ensureExportLayoutRow };
 
 export function purgeFieldFromTable(draft: DatasetSchemaDefinition, key: string): void {
   draft.tableColumns = draft.tableColumns.filter((c) => c.fieldKey !== key);
+  if (draft.excelColumns?.length) {
+    draft.excelColumns = draft.excelColumns.filter((c) => c.fieldKey !== key);
+  }
   const hidden = new Set(draft.hiddenTableColumnKeys ?? []);
   hidden.delete(key);
   hidden.delete(`meta:${key}`);
   hidden.delete(`index:${key}`);
   if (hidden.size) draft.hiddenTableColumnKeys = [...hidden];
   else delete draft.hiddenTableColumnKeys;
+  const hiddenExcel = new Set(draft.hiddenExcelColumnKeys ?? []);
+  hiddenExcel.delete(key);
+  hiddenExcel.delete(`meta:${key}`);
+  hiddenExcel.delete(`index:${key}`);
+  if (hiddenExcel.size) draft.hiddenExcelColumnKeys = [...hiddenExcel];
+  else delete draft.hiddenExcelColumnKeys;
   if (draft.defaultHiddenDetailFieldKeys?.length) {
     draft.defaultHiddenDetailFieldKeys = draft.defaultHiddenDetailFieldKeys.filter((k) => k !== key);
     if (!draft.defaultHiddenDetailFieldKeys.length) delete draft.defaultHiddenDetailFieldKeys;

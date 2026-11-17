@@ -12,6 +12,7 @@ function pruneInvisibleDetailFieldsFromLayout(draft: DatasetSchemaDefinition): v
     }
   }
 }
+import { ensureExcelColumnsInitialized, getHiddenExcelColumnIdSet } from "./excel-layout";
 import {
   INDEX_TABLE_FIELDS,
   getHiddenTableColumnIdSet,
@@ -57,6 +58,7 @@ function findMetaContainer(row: LayoutRow): LayoutContainer {
 /** Einmal beim Öffnen/Speichern des Schema-Editors — nicht bei jedem Tab-Render. */
 export function prepareSchemaEditorDraft(draft: DatasetSchemaDefinition): void {
   syncTableColumnsWithFieldCatalog(draft);
+  syncExcelColumnsWithFieldCatalog(draft);
   dedupeLayoutFieldKeys(draft);
   pruneInvisibleDetailFieldsFromLayout(draft);
   ensureUnplacedCatalogFieldsInLayout(draft);
@@ -101,6 +103,40 @@ export function syncTableColumnsWithFieldCatalog(draft: DatasetSchemaDefinition)
   draft.tableColumns = nextCols;
 }
 
+/** Feldkatalog → excelColumns (parallel zur Listenansicht). */
+export function syncExcelColumnsWithFieldCatalog(draft: DatasetSchemaDefinition): void {
+  ensureExcelColumnsInitialized(draft);
+  const seen = new Set<string>();
+  const nextCols: TableColumnDef[] = [];
+  for (const col of draft.excelColumns!) {
+    const id = tableColumnId(col);
+    if (seen.has(id)) continue;
+    const validMeta =
+      col.source !== "index" && draft.fields.some((f) => f.key === col.fieldKey);
+    const validIndex = col.source === "index" && INDEX_TABLE_FIELDS.some((i) => i.fieldKey === col.fieldKey);
+    if (!validMeta && !validIndex) continue;
+    seen.add(id);
+    if (col.source !== "index") {
+      const def = draft.fields.find((f) => f.key === col.fieldKey);
+      if (def) col.label = def.label;
+    }
+    nextCols.push(col);
+  }
+  for (const f of draft.fields) {
+    const id = tableColumnId({ fieldKey: f.key, label: f.label, source: "meta" });
+    if (seen.has(id)) continue;
+    seen.add(id);
+    nextCols.push({ fieldKey: f.key, label: f.label, source: "meta" });
+  }
+  for (const idx of INDEX_TABLE_FIELDS) {
+    const id = tableColumnId(idx);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    nextCols.push({ ...idx });
+  }
+  draft.excelColumns = nextCols;
+}
+
 export function tablePlacementRows(draft: DatasetSchemaDefinition): {
   rows: PlacementRow[];
   hidden: Set<string>;
@@ -125,8 +161,38 @@ export function tablePlacementRows(draft: DatasetSchemaDefinition): {
   return { rows, hidden };
 }
 
+export function excelPlacementRows(draft: DatasetSchemaDefinition): {
+  rows: PlacementRow[];
+  hidden: Set<string>;
+} {
+  ensureExcelColumnsInitialized(draft);
+  const hidden = getHiddenExcelColumnIdSet(draft);
+  const rows: PlacementRow[] = draft.excelColumns!.map((col) => {
+    if (col.source === "index") {
+      const idx = INDEX_TABLE_FIELDS.find((i) => i.fieldKey === col.fieldKey);
+      return {
+        kind: "index",
+        fieldKey: col.fieldKey,
+        label: idx?.label ?? col.label,
+      };
+    }
+    const def = draft.fields.find((f) => f.key === col.fieldKey);
+    return {
+      kind: "meta",
+      fieldKey: col.fieldKey,
+      label: def?.label ?? col.label,
+    };
+  });
+  return { rows, hidden };
+}
+
 export function tableColumnAt(draft: DatasetSchemaDefinition, rowIndex: number): TableColumnDef | undefined {
   return draft.tableColumns[rowIndex];
+}
+
+export function excelColumnAt(draft: DatasetSchemaDefinition, rowIndex: number): TableColumnDef | undefined {
+  ensureExcelColumnsInitialized(draft);
+  return draft.excelColumns![rowIndex];
 }
 
 export function isTablePlacementProtected(draft: DatasetSchemaDefinition, row: PlacementRow): boolean {

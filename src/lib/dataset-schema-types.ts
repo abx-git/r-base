@@ -64,6 +64,10 @@ export type DatasetSchemaDefinition = {
   tableColumns: TableColumnDef[];
   /** Tabellenspalten-IDs (source:fieldKey), in der Liste ausgeblendet */
   hiddenTableColumnKeys?: string[];
+  /** Excel-Export: Spalten (Standard = Kopie der Listenansicht) */
+  excelColumns?: TableColumnDef[];
+  /** Excel-Export: ausgeblendete Spalten-IDs */
+  hiddenExcelColumnKeys?: string[];
   /** Optionale Detailfelder, die neu/importiert standardmäßig ausgeblendet sind */
   defaultHiddenDetailFieldKeys?: string[];
   /** PDF-Export: Layout (Container / Felder / Dateien) */

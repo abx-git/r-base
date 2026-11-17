@@ -2,20 +2,28 @@ import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 import { setSchemaDetailFieldVisible, isDetailFieldVisibleInSchema } from "../lib/detail-field-visibility";
 import { isExportFieldVisibleInSchema, setSchemaExportFieldVisible } from "../lib/export-field-visibility";
 import {
+  excelColumnAt,
+  excelPlacementRows,
   isTablePlacementProtected,
   tableColumnAt,
   tablePlacementRows,
   type PlacementRow,
 } from "../lib/field-placement-editor";
+import {
+  applyExcelColumnHidden,
+  moveExcelColumn,
+  setExcelColumnVisible,
+} from "../lib/excel-layout";
 import { isOptionalSchemaField } from "../lib/meta-hidden-fields";
 import {
   applyTableColumnHidden,
+  isTableColumnHidden,
   setTableColumnVisible,
   tableColumnId,
 } from "../lib/table-layout";
 import { hint, mkBtn, moveTableCol, toggleSwitch } from "./schema-editor-shared";
 
-export type PlacementListMode = "liste" | "detail" | "export";
+export type PlacementListMode = "liste" | "excel" | "detail" | "export";
 
 export type PlacementListContext = {
   mode: PlacementListMode;
@@ -26,6 +34,7 @@ export type PlacementListContext = {
 
 const VIS_LABEL: Record<PlacementListMode, string> = {
   liste: "In Tabelle",
+  excel: "In Excel",
   detail: "Im Detail",
   export: "Im Export",
 };
@@ -52,9 +61,10 @@ export function renderFieldPlacementList(parent: HTMLElement, ctx: PlacementList
   const list = document.createElement("div");
   list.className = "schema-editor-liste-rows";
 
-  const { rows, hidden } = tablePlacementRows(draft);
+  const isExcel = mode === "excel";
+  const { rows, hidden } = isExcel ? excelPlacementRows(draft) : tablePlacementRows(draft);
   rows.forEach((row, idx) => {
-    list.append(renderListeRow(draft, row, idx, rows.length, hidden, ctx));
+    list.append(renderListeRow(draft, row, idx, rows.length, hidden, ctx, isExcel));
   });
   if (!rows.length) {
     parent.append(
@@ -193,8 +203,9 @@ function renderListeRow(
   rowCount: number,
   hidden: Set<string>,
   ctx: PlacementListContext,
+  excelMode = false,
 ): HTMLElement {
-  const col = tableColumnAt(draft, idx);
+  const col = excelMode ? excelColumnAt(draft, idx) : tableColumnAt(draft, idx);
   const id = col
     ? tableColumnId(col)
     : tableColumnId({
@@ -202,7 +213,7 @@ function renderListeRow(
         label: row.label,
         source: row.kind === "index" ? "index" : "meta",
       });
-  const isHidden = hidden.has(id);
+  const isHidden = col ? isTableColumnHidden(col, hidden) : hidden.has(id);
   const protectedCol = row.kind === "meta" && isTablePlacementProtected(draft, row);
 
   const el = document.createElement("div");
@@ -213,11 +224,13 @@ function renderListeRow(
   moves.className = "schema-editor-liste-moves";
   moves.append(
     mkBtn("↑", idx === 0, () => {
-      moveTableCol(ctx.getDraft(), idx, -1);
+      if (excelMode) moveExcelColumn(ctx.getDraft(), idx, -1);
+      else moveTableCol(ctx.getDraft(), idx, -1);
       ctx.rerender();
     }),
     mkBtn("↓", idx === rowCount - 1, () => {
-      moveTableCol(ctx.getDraft(), idx, 1);
+      if (excelMode) moveExcelColumn(ctx.getDraft(), idx, 1);
+      else moveTableCol(ctx.getDraft(), idx, 1);
       ctx.rerender();
     }),
   );
@@ -237,8 +250,9 @@ function renderListeRow(
     tag.textContent = "immer sichtbar";
     visCell.append(tag);
   } else {
+    const visTarget = excelMode ? "Excel" : "Tabelle";
     visCell.append(
-      toggleSwitch(!isHidden, `${row.label} in Tabelle`, (visible) => {
+      toggleSwitch(!isHidden, `${row.label} in ${visTarget}`, (visible) => {
         const d = ctx.getDraft();
         const candidate = {
           fieldKey: row.fieldKey,
@@ -247,9 +261,11 @@ function renderListeRow(
         };
         let next: DatasetSchemaDefinition;
         if (visible) {
-          next = setTableColumnVisible(d, candidate, true);
+          next = excelMode
+            ? setExcelColumnVisible(d, candidate, true)
+            : setTableColumnVisible(d, candidate, true);
         } else {
-          next = applyTableColumnHidden(d, id, true);
+          next = excelMode ? applyExcelColumnHidden(d, id, true) : applyTableColumnHidden(d, id, true);
         }
         if (ctx.setDraft) ctx.setDraft(next);
         else Object.assign(d, next);

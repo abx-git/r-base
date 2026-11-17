@@ -37,12 +37,9 @@ export function inferColumnSource(fieldKey: string): "meta" | "index" {
   return INDEX_FIELD_KEYS.has(fieldKey) ? "index" : "meta";
 }
 
-/** Normalisiert gespeicherte IDs (früher nur fieldKey oder falsches source:-Präfix). */
-export function resolveHiddenTableColumnIds(
-  schema: DatasetSchemaDefinition,
-  rawKeys?: string[],
-): Set<string> {
-  const cols = schema.tableColumns.length ? schema.tableColumns : DEFAULT_RUD_SCHEMA.tableColumns;
+/** Normalisiert gespeicherte Spalten-IDs anhand der konfigurierten Spaltenliste. */
+export function resolveHiddenColumnIds(columns: TableColumnDef[], rawKeys?: string[]): Set<string> {
+  const cols = columns.length ? columns : DEFAULT_RUD_SCHEMA.tableColumns;
   const hidden = new Set<string>();
   for (const raw of rawKeys ?? []) {
     const t = raw.trim();
@@ -59,6 +56,15 @@ export function resolveHiddenTableColumnIds(
     }
   }
   return hidden;
+}
+
+/** Normalisiert gespeicherte IDs (früher nur fieldKey oder falsches source:-Präfix). */
+export function resolveHiddenTableColumnIds(
+  schema: DatasetSchemaDefinition,
+  rawKeys?: string[],
+): Set<string> {
+  const cols = schema.tableColumns.length ? schema.tableColumns : DEFAULT_RUD_SCHEMA.tableColumns;
+  return resolveHiddenColumnIds(cols, rawKeys);
 }
 
 export function isTableColumnHidden(col: TableColumnDef, hidden: Set<string>): boolean {

@@ -1,9 +1,13 @@
 import * as XLSX from "xlsx";
+import type { IndexRecord } from "./db-index";
+import type { DatasetSchemaDefinition } from "./dataset-schema-types";
 import type { DatasetMeta } from "./meta-schema";
 import type { DatasetScan } from "./fs-local";
 import { writeMetaToFolder } from "./fs-local";
+import { visibleExcelColumns } from "./excel-layout";
 import { displayLocId } from "./meta-schema";
 import { parseLocIdToken } from "./loc-id";
+import { formatTableCell } from "./table-schema";
 
 export type ExcelRow = {
   locId: string;
@@ -14,6 +18,41 @@ export type ExcelRow = {
   lastModified: string;
 };
 
+export function excelExportFilename(schema: DatasetSchemaDefinition): string {
+  const slug = (schema.id || "schema").replace(/[^a-z0-9-]+/gi, "-").replace(/^-|-$/g, "");
+  return `r-base-${slug}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+}
+
+export function exportSchemaMetadataXlsx(
+  scans: DatasetScan[],
+  schema: DatasetSchemaDefinition,
+  records: IndexRecord[],
+): Blob {
+  const cols = visibleExcelColumns(schema);
+  const byLoc = new Map(records.map((r) => [r.locId, r]));
+  const headers = cols.map((c) => c.label || c.fieldKey);
+  const sheetRows: Record<string, string>[] = [];
+  for (const scan of scans) {
+    const record = byLoc.get(scan.meta.locId);
+    if (!record) continue;
+    const row: Record<string, string> = {};
+    for (let i = 0; i < cols.length; i++) {
+      const col = cols[i]!;
+      const header = headers[i]!;
+      row[header] = formatTableCell(col, record, scan.meta);
+    }
+    sheetRows.push(row);
+  }
+  const sheet = XLSX.utils.json_to_sheet(sheetRows, { header: headers });
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "Metadaten");
+  const buf = XLSX.write(book, { type: "array", bookType: "xlsx" });
+  return new Blob([buf], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+/** Legacy-Export ohne Schema-Konfiguration (festes Spaltenset). */
 export function exportMetadataXlsx(scans: DatasetScan[]): Blob {
   const rows: ExcelRow[] = scans.map((s) => ({
     locId: displayLocId(s.meta.locId),

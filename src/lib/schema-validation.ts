@@ -1,4 +1,5 @@
 import type { DatasetSchemaDefinition } from "./dataset-schema-types";
+import { ensureExcelColumnsInitialized } from "./excel-layout";
 
 export function validateSchemaDefinition(draft: DatasetSchemaDefinition): string | null {
   if (!draft.id.trim()) return "ID fehlt.";
@@ -11,6 +12,8 @@ export function validateSchemaDefinition(draft: DatasetSchemaDefinition): string
     keys.add(f.key);
   }
   if (!draft.tableColumns.length) return "Mindestens eine Tabellenspalte.";
+  ensureExcelColumnsInitialized(draft);
+  if (!draft.excelColumns?.length) return "Mindestens eine Excel-Spalte.";
   if (!draft.layout.length) return "Mindestens eine Layout-Zeile.";
   return null;
 }
