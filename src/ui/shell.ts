@@ -506,12 +506,21 @@ function tableListSchema(): DatasetSchemaDefinition {
   return getDefaultSchema();
 }
 
+function syncTableStickyHeaderMetrics(canvas: HTMLElement, thead: HTMLElement): void {
+  requestAnimationFrame(() => {
+    const row1 = thead.querySelector("tr:first-child");
+    if (!row1) return;
+    canvas.style.setProperty("--table-head-row1-h", `${row1.getBoundingClientRect().height}px`);
+  });
+}
+
 function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
+  const tableView = el("div", "table-view");
   if (appState.records.length > 0 && appState.scans.length === 0) {
     const warn = el("div", "banner banner-error");
     warn.textContent =
       "Es gibt Einträge im lokalen Index, aber keine geladenen Datensatz-Ordner — bitte den Stammordner erneut verbinden.";
-    main.append(warn);
+    tableView.append(warn);
   }
   const listSchema = tableListSchema();
   const columns = visibleTableColumns(listSchema);
@@ -565,7 +574,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear);
   }
 
-  const tableWrap = el("div", "table-wrap");
+  const tableCanvas = el("div", "table-canvas");
   const table = el("table", "data-table data-table--compact");
   const thead = el("thead");
   const headRow = el("tr");
@@ -678,7 +687,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   }
 
   table.append(thead, tbody);
-  tableWrap.append(table);
+  tableCanvas.append(table);
 
   const backHint = el("p", "muted table-list-hint");
   const sortHint = sort
@@ -687,9 +696,12 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   backHint.textContent = rows.length
     ? `${rows.length} Datensätze${sortHint}`
     : "Keine Datensätze — neu anlegen oder Ordner wählen.";
-  main.append(backHint);
-  if (bulkBar) main.append(bulkBar);
-  main.append(tableWrap);
+  tableView.append(backHint);
+  if (bulkBar) tableView.append(bulkBar);
+  tableView.append(tableCanvas);
+  main.append(tableView);
+
+  syncTableStickyHeaderMetrics(tableCanvas, thead);
   if (appState.selectedLocId) {
     requestAnimationFrame(() => {
       tbody.querySelector("tr.data-row--focus")?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1481,8 +1493,13 @@ export function mountShell(container: HTMLElement, handlers: ShellHandlers): voi
     const body = el("div", "layout-body");
     renderSidebar(body, handlers);
     const main = el("main", "main-pane");
-    if (appState.view === "detail") renderDetail(main, handlers);
-    else renderTable(main, handlers);
+    if (appState.view === "detail") {
+      main.classList.add("main-pane--detail");
+      renderDetail(main, handlers);
+    } else {
+      main.classList.add("main-pane--table");
+      renderTable(main, handlers);
+    }
     body.append(main);
     container.append(body);
     renderSyncLog(container);
