@@ -217,65 +217,82 @@ function statusLabel(status: string): string {
   }
 }
 
+function chromeMenuGroup(label: string, buttons: HTMLElement[]): HTMLElement {
+  const group = el("div", "chrome-menu-group");
+  const head = el("span", "chrome-menu-label");
+  head.textContent = label;
+  group.append(head);
+  for (const btn of buttons) {
+    btn.classList.add("chrome-menu-item");
+    btn.setAttribute("role", "menuitem");
+    group.append(btn);
+  }
+  return group;
+}
+
 function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   const header = el("header", "chrome-header");
   const title = el("span", "chrome-title");
   title.textContent = "R-Base";
   const actions = el("div", "chrome-actions");
 
-  const folderBtn = el("button", "btn");
+  const folderBtn = el("button", "btn chrome-header-btn");
   folderBtn.type = "button";
-  folderBtn.textContent = appState.rootHandle ? "Ordner wechseln" : "Ordner wählen";
+  folderBtn.textContent = appState.rootHandle ? "Stammordner…" : "Stammordner verbinden…";
+  folderBtn.title = "Lokalen Datenordner wählen oder wechseln";
   folderBtn.addEventListener("click", () => void handlers.onPickFolder());
 
-  const syncBtn = el("button", "btn btn-primary");
+  const syncBtn = el("button", "btn btn-primary chrome-header-btn");
   syncBtn.type = "button";
-  syncBtn.textContent = appState.syncBusy ? "Sync läuft…" : "Mit NAS abgleichen";
+  syncBtn.textContent = appState.syncBusy ? "Synchronisiere…" : "Synchronisieren";
+  syncBtn.title = "Abgleich mit dem NAS (WebDAV)";
   syncBtn.disabled = !appState.ready || appState.syncBusy || !handlers.canSync();
   syncBtn.addEventListener("click", () => void handlers.onSync());
 
-  const excelExport = el("button", "btn");
-  excelExport.type = "button";
-  excelExport.textContent = "Excel export";
-  excelExport.disabled = !appState.ready;
-  excelExport.addEventListener("click", () => handlers.onExcelExport());
-
   const excelImport = el("button", "btn");
   excelImport.type = "button";
-  excelImport.textContent = "Excel import";
+  excelImport.textContent = "Excel importieren…";
   excelImport.disabled = !appState.ready;
   excelImport.addEventListener("click", () => handlers.onExcelImport());
 
   const csvImport = el("button", "btn");
   csvImport.type = "button";
-  csvImport.textContent = "CSV import";
+  csvImport.textContent = "CSV importieren…";
   csvImport.disabled = !appState.ready;
-  csvImport.title = "Rudisten-Jura-CSV: neue Datensätze + Feldschema";
+  csvImport.title = "Rudisten-Datenbank Jura: Datensätze und Felder anlegen/aktualisieren";
   csvImport.addEventListener("click", () => handlers.onCsvImport());
+
+  const excelExport = el("button", "btn");
+  excelExport.type = "button";
+  excelExport.textContent = "Excel exportieren…";
+  excelExport.disabled = !appState.ready;
+  excelExport.title = "Metadaten der gefilterten Liste als Tabelle";
+  excelExport.addEventListener("click", () => handlers.onExcelExport());
 
   const pdfExport = el("button", "btn");
   pdfExport.type = "button";
-  pdfExport.textContent = "Schema-PDF…";
+  pdfExport.textContent = "PDF exportieren…";
   pdfExport.disabled = !appState.ready;
-  pdfExport.title = "Alle Datensätze eines Schemas als PDF-Datenblätter";
+  pdfExport.title = "Datenblätter der gefilterten Datensätze";
   pdfExport.addEventListener("click", () => handlers.onSchemaPdfExport());
 
   const htmlExport = el("button", "btn");
   htmlExport.type = "button";
-  htmlExport.textContent = "Schema-HTML…";
+  htmlExport.textContent = "HTML-Website exportieren…";
   htmlExport.disabled = !appState.ready;
-  htmlExport.title = "Statische Website im Stammordner (_exports/html/…)";
+  htmlExport.title = "Statische Seiten unter _exports/html/ im Stammordner";
   htmlExport.addEventListener("click", () => handlers.onSchemaHtmlExport());
 
   const settingsBtn = el("button", "btn");
   settingsBtn.type = "button";
-  settingsBtn.textContent = "Einstellungen";
+  settingsBtn.textContent = "Einstellungen…";
   settingsBtn.addEventListener("click", () => handlers.onOpenSettings());
 
   const menu = el("div", "chrome-menu");
   const menuToggle = el("button", "btn chrome-menu-toggle");
   menuToggle.type = "button";
-  menuToggle.textContent = "Menü";
+  menuToggle.textContent = "Aktionen";
+  menuToggle.title = "Importieren, exportieren, Einstellungen";
   menuToggle.setAttribute("aria-haspopup", "menu");
   menuToggle.setAttribute("aria-expanded", "false");
 
@@ -283,12 +300,11 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   panel.setAttribute("role", "menu");
   panel.tabIndex = -1;
 
-  panel.append(folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, htmlExport, settingsBtn);
-
-  for (const btn of [folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, htmlExport, settingsBtn]) {
-    btn.classList.add("chrome-menu-item");
-    btn.setAttribute("role", "menuitem");
-  }
+  panel.append(
+    chromeMenuGroup("Importieren", [excelImport, csvImport]),
+    chromeMenuGroup("Exportieren", [excelExport, pdfExport, htmlExport]),
+    chromeMenuGroup("App", [settingsBtn]),
+  );
 
   const closeMenu = () => {
     menu.classList.remove("is-open");
@@ -333,7 +349,7 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   menu.append(menuToggle, panel);
   const persistInd = buildPersistIndicator();
   if (persistInd) actions.append(persistInd);
-  actions.append(menu);
+  actions.append(folderBtn, syncBtn, menu);
   header.append(title, actions);
 
   if (appState.rootLabel) {
