@@ -441,8 +441,7 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const metaById = buildMetaByLocId(appState.scans);
   const sort = appState.tableSort;
 
-  const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter(), appState.scans);
-  const rows = sortIndexRecords(filtered, sort, metaById);
+  const rows = filteredSortedTableRows();
   const visibleLocIds = rows.map((r) => r.locId);
   const selection = selectedTableIds();
   const selectedVisible = visibleLocIds.filter((id) => selection.has(id));
@@ -534,7 +533,13 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const tbody = el("tbody");
   for (const row of rows) {
     const isSelected = selection.has(row.locId);
-    const tr = el("tr", isSelected ? "data-row data-row--selected" : "data-row");
+    const isFocused =
+      appState.selectedLocId != null && locIdsReferToSameRecord(row.locId, appState.selectedLocId);
+    let rowClass = "data-row";
+    if (isSelected) rowClass += " data-row--selected";
+    if (isFocused) rowClass += " data-row--focus";
+    const tr = el("tr", rowClass);
+    if (isFocused) tr.setAttribute("aria-current", "true");
     tr.addEventListener("click", () => {
       void (async () => {
         try {
@@ -595,6 +600,11 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   main.append(backHint);
   if (bulkBar) main.append(bulkBar);
   main.append(tableWrap);
+  if (appState.selectedLocId) {
+    requestAnimationFrame(() => {
+      tbody.querySelector("tr.data-row--focus")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }
 }
 
 function beginIdChange(scan: { meta: { locId: string } }, handlers: ShellHandlers): void {
@@ -1009,6 +1019,38 @@ function filteredDetailRows(): IndexRecord[] {
   return filterRecordsAdvanced(appState.records, currentRecordFilter(), appState.scans);
 }
 
+function filteredSortedTableRows(): IndexRecord[] {
+  const metaById = buildMetaByLocId(appState.scans);
+  const filtered = filterRecordsAdvanced(appState.records, currentRecordFilter(), appState.scans);
+  return sortIndexRecords(filtered, appState.tableSort, metaById);
+}
+
+function moveTableFocus(delta: number): void {
+  const rows = filteredSortedTableRows();
+  if (!rows.length) return;
+  const selected = appState.selectedLocId;
+  let index = selected ? rows.findIndex((r) => locIdsReferToSameRecord(r.locId, selected)) : -1;
+  if (index < 0) {
+    index = delta > 0 ? -1 : rows.length;
+  }
+  const nextIndex = Math.max(0, Math.min(rows.length - 1, index + delta));
+  const next = rows[nextIndex];
+  if (!next) return;
+  if (selected && locIdsReferToSameRecord(next.locId, selected)) return;
+  const scan = findScanByLocId(appState.scans, next.locId);
+  patchState({ selectedLocId: scan?.meta.locId ?? next.locId });
+}
+
+async function openTableFocusInDetail(): Promise<void> {
+  if (!appState.selectedLocId) return;
+  try {
+    await flushAllPendingMetaSaves();
+  } catch {
+    /* */
+  }
+  patchState({ view: "detail" });
+}
+
 async function navigateFilteredDetail(delta: number): Promise<void> {
   try {
     await flushAllPendingMetaSaves();
@@ -1292,7 +1334,7 @@ export type ShellHandlers = {
   onRerender: () => void;
 };
 
-function installDetailKeyboardNav(): void {
+function installShellKeyboardNav(): void {
   const onKey = (e: KeyboardEvent) => {
     const t = e.target;
     const typing =
@@ -1306,8 +1348,21 @@ function installDetailKeyboardNav(): void {
       void handlersRef?.onUndo();
       return;
     }
-    if (appState.view !== "detail") return;
     if (typing) return;
+    if (appState.view === "table" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveTableFocus(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveTableFocus(-1);
+      } else if (e.key === "Enter" && appState.selectedLocId) {
+        e.preventDefault();
+        void openTableFocusInDetail();
+      }
+      return;
+    }
+    if (appState.view !== "detail") return;
     if (e.key === "ArrowLeft" && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       navigateFilteredDetail(-1);
@@ -1323,7 +1378,7 @@ let handlersRef: ShellHandlers | null = null;
 
 export function mountShell(container: HTMLElement, handlers: ShellHandlers): void {
   handlersRef = handlers;
-  installDetailKeyboardNav();
+  installShellKeyboardNav();
   subscribePersistIndicator(syncChromePersistIndicator);
 
   const render = () => {
