@@ -1450,6 +1450,25 @@ function installShellKeyboardNav(): void {
       void handlersRef?.onUndo();
       return;
     }
+    if (
+      appState.view === "detail" &&
+      e.key === "Escape" &&
+      !e.altKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !document.querySelector(".modal-backdrop")
+    ) {
+      e.preventDefault();
+      void (async () => {
+        try {
+          await flushAllPendingMetaSaves();
+        } catch {
+          /* */
+        }
+        patchState({ view: "table" });
+      })();
+      return;
+    }
     if (typing) return;
     if (appState.view === "table" && !e.altKey && !e.ctrlKey && !e.metaKey) {
       if (e.key === "ArrowDown") {
