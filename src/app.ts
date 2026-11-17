@@ -1,4 +1,5 @@
-import { appState, getSelectedScan, patchState } from "./state";
+import { bindMetaAutoSave, commitMetaFieldSave, queueMetaFieldSave } from "./lib/meta-auto-save";
+import { appState, getSelectedScan, patchState, withPersistStatus } from "./state";
 import { mountShell, setPreviewContent } from "./ui/shell";
 import { openSettingsModal } from "./ui/settings-modal";
 import {
@@ -95,6 +96,21 @@ async function connectFolder(): Promise<void> {
   patchState({ rootHandle: handle, rootLabel: handle.name });
   await reloadFromDisk();
   patchState({ listViewSchemaId: null, message: "Stammordner verbunden." });
+}
+
+async function persistMetaFieldValue(fieldKey: string, value: unknown): Promise<void> {
+  const scan = getSelectedScan();
+  if (!scan) return;
+  setMetaFieldValue(scan.meta, fieldKey, value);
+  scan.meta.lastModified = new Date().toISOString();
+  await writeMetaToFolder(scan.handle, scan.meta);
+  await reloadFromDisk();
+}
+
+bindMetaAutoSave(persistMetaFieldValue);
+
+function reportMetaSaveError(e: unknown): void {
+  patchState({ error: e instanceof Error ? e.message : String(e) });
 }
 
 async function handleSetFieldHidden(
@@ -245,24 +261,42 @@ export function startApp(container: HTMLElement): void {
     onMetaChange: async (partial) => {
       const scan = getSelectedScan();
       if (!scan) return;
-      Object.assign(scan.meta, partial);
-      await writeMetaToFolder(scan.handle, scan.meta);
-      await reloadFromDisk();
+      try {
+        await withPersistStatus(async () => {
+          Object.assign(scan.meta, partial);
+          await writeMetaToFolder(scan.handle, scan.meta);
+          await reloadFromDisk();
+        });
+      } catch (e) {
+        reportMetaSaveError(e);
+      }
+    },
+    onMetaFieldDraft: (fieldKey, value) => {
+      if (!getSelectedScan()) return;
+      queueMetaFieldSave(fieldKey, value);
+    },
+    onMetaFieldCommit: (fieldKey, value) => {
+      void commitMetaFieldSave(fieldKey, value).catch(reportMetaSaveError);
     },
     onMetaFieldChange: async (fieldKey, value) => {
-      const scan = getSelectedScan();
-      if (!scan) return;
-      setMetaFieldValue(scan.meta, fieldKey, value);
-      scan.meta.lastModified = new Date().toISOString();
-      await writeMetaToFolder(scan.handle, scan.meta);
-      await reloadFromDisk();
+      try {
+        await commitMetaFieldSave(fieldKey, value);
+      } catch (e) {
+        reportMetaSaveError(e);
+      }
     },
     onAddFiles: async (files) => {
       const scan = getSelectedScan();
       if (!scan) return;
-      await addFilesToDataset(scan.handle, scan.meta, files);
-      await reloadFromDisk();
-      patchState({ message: `${files.length} Datei(en) hinzugefügt.` });
+      try {
+        await withPersistStatus(async () => {
+          await addFilesToDataset(scan.handle, scan.meta, files);
+          await reloadFromDisk();
+        });
+        patchState({ message: `${files.length} Datei(en) hinzugefügt.` });
+      } catch (e) {
+        reportMetaSaveError(e);
+      }
     },
     onPreviewFile: async (relativePath) => {
       const scan = getSelectedScan();
@@ -285,15 +319,27 @@ export function startApp(container: HTMLElement): void {
     onDeleteFile: async (relativePath) => {
       const scan = getSelectedScan();
       if (!scan) return;
-      await deleteFileFromDataset(scan.handle, scan.meta, relativePath);
-      await reloadFromDisk();
-      patchState({ message: "Datei gelöscht." });
+      try {
+        await withPersistStatus(async () => {
+          await deleteFileFromDataset(scan.handle, scan.meta, relativePath);
+          await reloadFromDisk();
+        });
+        patchState({ message: "Datei gelöscht." });
+      } catch (e) {
+        reportMetaSaveError(e);
+      }
     },
     onFileMetaChange: async (relativePath, patch) => {
       const scan = getSelectedScan();
       if (!scan) return;
-      await updateFileUserMeta(scan.handle, scan.meta, relativePath, patch);
-      await reloadFromDisk();
+      try {
+        await withPersistStatus(async () => {
+          await updateFileUserMeta(scan.handle, scan.meta, relativePath, patch);
+          await reloadFromDisk();
+        });
+      } catch (e) {
+        reportMetaSaveError(e);
+      }
     },
     onChangeDatasetId: async (rawNewId) => {
       if (!appState.rootHandle) return;

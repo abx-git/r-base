@@ -72,14 +72,50 @@ function wireBezeichnungField(field: HTMLInputElement | HTMLTextAreaElement, han
   field.addEventListener("focus", () => {
     if (field.value === DEFAULT_BEZEICHNUNG_HINT) field.value = "";
   });
+  const read = () => field.value.trim();
+  field.addEventListener("input", () => handlers.onMetaFieldDraft("bezeichnung", read()));
   field.addEventListener("change", () => {
-    const v = field.value.trim();
-    void handlers.onMetaFieldChange("bezeichnung", v);
+    const v = read();
+    handlers.onMetaFieldCommit("bezeichnung", v);
     if (!v) {
       field.value = "";
       field.placeholder = DEFAULT_BEZEICHNUNG_HINT;
     }
   });
+}
+
+function wireMetaDraftCommit(
+  field: HTMLInputElement | HTMLTextAreaElement,
+  fieldKey: string,
+  dataType: SchemaFieldDef["dataType"],
+  handlers: ShellHandlers,
+): void {
+  const read = () => serializeFieldInput(dataType, field.value);
+  field.addEventListener("input", () => handlers.onMetaFieldDraft(fieldKey, read()));
+  field.addEventListener("change", () => handlers.onMetaFieldCommit(fieldKey, read()));
+}
+
+function renderPersistStatus(actions: HTMLElement): void {
+  if (!appState.ready || appState.persistStatus === "idle") return;
+  const ind = el("span", `chrome-persist chrome-persist--${appState.persistStatus}`);
+  ind.setAttribute("aria-live", "polite");
+  switch (appState.persistStatus) {
+    case "dirty":
+      ind.textContent = "●";
+      ind.title = "Ungespeicherte Änderungen (werden automatisch gespeichert)";
+      break;
+    case "saving":
+      ind.textContent = "◌";
+      ind.title = "Speichert…";
+      break;
+    case "saved":
+      ind.textContent = "✓";
+      ind.title = "Lokal gespeichert";
+      break;
+    default:
+      return;
+  }
+  actions.append(ind);
 }
 
 function wirePlaceholderFocus(field: HTMLInputElement | HTMLTextAreaElement): void {
@@ -223,6 +259,7 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   });
 
   menu.append(menuToggle, panel);
+  renderPersistStatus(actions);
   actions.append(menu);
   header.append(title, actions);
 
@@ -560,9 +597,7 @@ function renderSchemaFieldInput(
   if (def.dataType === "text") {
     const area = el("textarea", "field area");
     area.value = formatFieldForInput(def.dataType, value);
-    area.addEventListener("change", () =>
-      void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, area.value)),
-    );
+    wireMetaDraftCommit(area, def.key, def.dataType, handlers);
     wrap.append(area);
   } else if (def.dataType === "boolean") {
     const row = el("div", "check-row");
@@ -570,7 +605,7 @@ function renderSchemaFieldInput(
     check.type = "checkbox";
     check.checked = Boolean(value);
     check.addEventListener("change", () =>
-      void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, "", check.checked)),
+      handlers.onMetaFieldCommit(def.key, serializeFieldInput(def.dataType, "", check.checked)),
     );
     row.append(check);
     wrap.append(row);
@@ -589,7 +624,7 @@ function renderSchemaFieldInput(
     }
     sel.value = formatFieldForInput(def.dataType, value);
     sel.addEventListener("change", () =>
-      void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, sel.value)),
+      handlers.onMetaFieldCommit(def.key, serializeFieldInput(def.dataType, sel.value)),
     );
     wrap.append(sel);
   } else if (def.dataType === "tags") {
@@ -608,9 +643,7 @@ function renderSchemaFieldInput(
       wireBezeichnungField(input, handlers);
     } else {
       input.value = formatFieldForInput(def.dataType, value);
-      input.addEventListener("change", () =>
-        void handlers.onMetaFieldChange(def.key, serializeFieldInput(def.dataType, input.value)),
-      );
+      wireMetaDraftCommit(input, def.key, def.dataType, handlers);
     }
     if (def.constraints?.required) input.required = true;
     if (def.constraints?.maxLength) input.maxLength = def.constraints.maxLength;
@@ -761,17 +794,17 @@ function renderObsoleteFieldsSection(
     if (text.length > 80 || text.includes("\n")) {
       const area = el("textarea", "field area obsolete-field-value");
       area.value = text === "—" ? "" : text;
-      area.addEventListener("change", () => {
-        void handlers.onMetaFieldChange(entry.key, parseObsoleteFieldInput(area.value));
-      });
+      const readArea = () => parseObsoleteFieldInput(area.value);
+      area.addEventListener("input", () => handlers.onMetaFieldDraft(entry.key, readArea()));
+      area.addEventListener("change", () => handlers.onMetaFieldCommit(entry.key, readArea()));
       row.append(area);
     } else {
       const input = el("input", "field obsolete-field-value");
       input.type = "text";
       input.value = text === "—" ? "" : text;
-      input.addEventListener("change", () => {
-        void handlers.onMetaFieldChange(entry.key, parseObsoleteFieldInput(input.value));
-      });
+      const readIn = () => parseObsoleteFieldInput(input.value);
+      input.addEventListener("input", () => handlers.onMetaFieldDraft(entry.key, readIn()));
+      input.addEventListener("change", () => handlers.onMetaFieldCommit(entry.key, readIn()));
       row.append(input);
     }
     body.append(row);
@@ -1133,6 +1166,8 @@ export type ShellHandlers = {
   onOpenSettings: () => void;
   onNewDataset: () => Promise<void>;
   onMetaChange: (partial: { bezeichnung?: string; kategorie?: string; notes?: string }) => Promise<void>;
+  onMetaFieldDraft: (fieldKey: string, value: unknown) => void;
+  onMetaFieldCommit: (fieldKey: string, value: unknown) => void;
   onMetaFieldChange: (fieldKey: string, value: unknown) => Promise<void>;
   onAddFiles: (files: File[]) => Promise<void>;
   onPreviewFile: (relativePath: string) => Promise<void>;

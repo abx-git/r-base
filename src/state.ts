@@ -6,6 +6,8 @@ import type { SyncLogLine, SyncProgress } from "./lib/webdav-sync";
 
 export type AppView = "table" | "detail";
 
+export type PersistStatus = "idle" | "dirty" | "saving" | "saved";
+
 export type TableSortState = {
   fieldKey: string;
   source: "meta" | "index";
@@ -34,6 +36,8 @@ export type AppState = {
   syncProgress: SyncProgress | null;
   syncLogs: SyncLogLine[];
   globalSync: GlobalSyncMeta;
+  /** Lokales meta.json: ungespeichert / speichert / gerade gespeichert */
+  persistStatus: PersistStatus;
 };
 
 type Listener = () => void;
@@ -41,7 +45,25 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 
 const BANNER_DISMISS_MS = 6_000;
+const PERSIST_SAVED_IDLE_MS = 5_000;
 let bannerDismissTimer: ReturnType<typeof setTimeout> | undefined;
+let persistIdleTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearPersistIdleTimer(): void {
+  if (persistIdleTimer === undefined) return;
+  clearTimeout(persistIdleTimer);
+  persistIdleTimer = undefined;
+}
+
+function schedulePersistSavedIdle(): void {
+  clearPersistIdleTimer();
+  persistIdleTimer = setTimeout(() => {
+    persistIdleTimer = undefined;
+    if (appState.persistStatus !== "saved") return;
+    Object.assign(appState, { persistStatus: "idle" as PersistStatus });
+    for (const l of listeners) l();
+  }, PERSIST_SAVED_IDLE_MS);
+}
 
 function clearBannerDismissTimer(): void {
   if (bannerDismissTimer === undefined) return;
@@ -92,6 +114,7 @@ export const appState: AppState = {
     lastError: null,
     pendingCount: 0,
   },
+  persistStatus: "idle",
 };
 
 export function subscribe(listener: Listener): () => void {
@@ -105,7 +128,24 @@ export function patchState(partial: Partial<AppState>): void {
     if (appState.message || appState.error) scheduleBannerDismiss();
     else clearBannerDismissTimer();
   }
+  if ("persistStatus" in partial) {
+    if (appState.persistStatus === "saved") schedulePersistSavedIdle();
+    else if (appState.persistStatus === "dirty" || appState.persistStatus === "saving") {
+      clearPersistIdleTimer();
+    }
+  }
   for (const l of listeners) l();
+}
+
+export async function withPersistStatus(work: () => Promise<void>): Promise<void> {
+  patchState({ persistStatus: "saving" });
+  try {
+    await work();
+    patchState({ persistStatus: "saved" });
+  } catch (e) {
+    patchState({ persistStatus: "dirty" });
+    throw e;
+  }
 }
 
 export function getSelectedScan(): DatasetScan | null {
