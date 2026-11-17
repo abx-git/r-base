@@ -1,14 +1,10 @@
 import type { DatasetSchemaDefinition, FieldDataType } from "../lib/dataset-schema-types";
-import { isOptionalSchemaField } from "../lib/meta-hidden-fields";
 import {
   fieldTypes,
   hint,
-  mkBtn,
-  moveSchemaField,
   purgeFieldFromLayout,
   purgeFieldFromTable,
   slugFieldKey,
-  toggleDraftDetailDefaultHidden,
   toggleSwitch,
 } from "./schema-editor-shared";
 
@@ -23,9 +19,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
   parent.replaceChildren();
 
   parent.append(
-    hint(
-      "Was für Felder es gibt (Key, Typ, Pflicht). „In Detail“ = Standard in der Detailansicht für neue Datensätze und Import. Tabellen → Listenansicht. Anordnung → Detailformular.",
-    ),
+    hint("Definition der Metafelder: Bezeichnung, Key, Datentyp und Pflicht. Listen- und Detail-Ansicht konfigurierst du in den anderen Tabs."),
   );
 
   const toolbar = document.createElement("div");
@@ -40,8 +34,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
 
   const header = document.createElement("div");
   header.className = "schema-editor-liste-header schema-editor-grid-row--felder";
-  header.innerHTML =
-    "<span></span><span>Label</span><span>Key</span><span>Typ</span><span>Pflicht</span><span>In Detail</span><span></span>";
+  header.innerHTML = "<span>Label</span><span>Key</span><span>Typ</span><span>Pflicht</span>";
   parent.append(header);
 
   const list = document.createElement("div");
@@ -84,29 +77,11 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
   const paint = () => {
     list.replaceChildren();
     const q = filter();
-    const total = draft.fields.length;
-    const hiddenDefaults = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
-    draft.fields.forEach((field, idx) => {
+    draft.fields.forEach((field) => {
       if (q && !field.key.toLowerCase().includes(q) && !field.label.toLowerCase().includes(q)) return;
 
       const row = document.createElement("div");
       row.className = "schema-editor-liste-row schema-editor-grid-row--felder";
-      if (isOptionalSchemaField(field) && hiddenDefaults.has(field.key)) {
-        row.classList.add("schema-editor-liste-row--hidden");
-      }
-
-      const moves = document.createElement("div");
-      moves.className = "schema-editor-liste-moves";
-      moves.append(
-        mkBtn("↑", idx === 0, () => {
-          moveSchemaField(draft, idx, -1);
-          rerender();
-        }),
-        mkBtn("↓", idx === total - 1, () => {
-          moveSchemaField(draft, idx, 1);
-          rerender();
-        }),
-      );
 
       const labelCell = document.createElement("input");
       labelCell.className = "field";
@@ -114,12 +89,31 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
       labelCell.setAttribute("aria-label", "Feldbezeichnung");
       labelCell.addEventListener("change", () => {
         field.label = labelCell.value;
+        for (const col of draft.tableColumns) {
+          if (col.fieldKey === field.key && col.source !== "index") col.label = field.label;
+        }
       });
 
+      const keyWrap = document.createElement("div");
+      keyWrap.className = "schema-editor-feld-key-wrap";
       const keyBadge = document.createElement("span");
       keyBadge.className = "schema-editor-liste-key";
       keyBadge.textContent = field.key;
-      keyBadge.title = field.system ? "Systemfeld (Key nicht änderbar)" : "Key wird beim Anlegen festgelegt";
+      keyWrap.append(keyBadge);
+      if (!field.system) {
+        const rem = document.createElement("button");
+        rem.type = "button";
+        rem.className = "link-btn schema-editor-feld-remove";
+        rem.textContent = "entfernen";
+        rem.addEventListener("click", () => {
+          draft.fields = draft.fields.filter((f) => f.key !== field.key);
+          purgeFieldFromLayout(draft, field.key);
+          purgeFieldFromTable(draft, field.key);
+          setStatus("");
+          rerender();
+        });
+        keyWrap.append(rem);
+      }
 
       const typeCell = document.createElement("div");
       if (field.system && field.dataType === "locId") {
@@ -137,6 +131,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
           sel.append(opt);
         }
         sel.value = field.dataType;
+        sel.disabled = Boolean(field.system);
         sel.addEventListener("change", () => {
           field.dataType = sel.value as FieldDataType;
         });
@@ -150,6 +145,11 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
         tag.className = "schema-editor-badge";
         tag.textContent = "Pflicht";
         reqCell.append(tag);
+      } else if (field.system) {
+        const tag = document.createElement("span");
+        tag.className = "schema-editor-badge";
+        tag.textContent = field.constraints?.required ? "Pflicht" : "—";
+        reqCell.append(tag);
       } else {
         reqCell.append(
           toggleSwitch(Boolean(field.constraints?.required), `${field.label} Pflichtfeld`, (on) => {
@@ -158,38 +158,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
         );
       }
 
-      const detailCell = document.createElement("div");
-      if (!isOptionalSchemaField(field)) {
-        const tag = document.createElement("span");
-        tag.className = "schema-editor-badge";
-        tag.textContent = "immer";
-        detailCell.append(tag);
-      } else {
-        const visibleInDetail = !hiddenDefaults.has(field.key);
-        detailCell.append(
-          toggleSwitch(visibleInDetail, `${field.label} standardmäßig in Detail`, (visible) => {
-            toggleDraftDetailDefaultHidden(draft, field.key, !visible);
-            paint();
-          }),
-        );
-      }
-
-      const actCell = document.createElement("div");
-      actCell.className = "schema-editor-felder-act";
-      if (!field.system) {
-        const del = mkBtn("×", false, () => {
-          draft.fields = draft.fields.filter((f) => f.key !== field.key);
-          purgeFieldFromLayout(draft, field.key);
-          purgeFieldFromTable(draft, field.key);
-          setStatus("");
-          rerender();
-        });
-        del.classList.add("schema-editor-container-remove");
-        del.title = "Feld aus Schema entfernen";
-        actCell.append(del);
-      }
-
-      row.append(moves, labelCell, keyBadge, typeCell, reqCell, detailCell, actCell);
+      row.append(labelCell, keyWrap, typeCell, reqCell);
       list.append(row);
     });
 

@@ -1,13 +1,14 @@
 import type { DatasetSchemaDefinition, TableColumnDef } from "../lib/dataset-schema-types";
 import {
   applyTableColumnHidden,
+  INDEX_TABLE_FIELDS,
   isProtectedTableColumn,
   listTableColumnLayout,
   setTableColumnVisible,
   tableColumnId,
   type TableColumnCandidate,
 } from "../lib/table-layout";
-import { columnKeyOptions, hint, mkBtn, moveTableCol, toggleSwitch } from "./schema-editor-shared";
+import { hint, mkBtn, moveTableCol, toggleSwitch } from "./schema-editor-shared";
 
 export type ListeRenderContext = {
   getDraft: () => DatasetSchemaDefinition;
@@ -15,18 +16,25 @@ export type ListeRenderContext = {
   rerender: () => void;
 };
 
+function columnDisplayLabel(draft: DatasetSchemaDefinition, col: TableColumnDef): string {
+  if (col.source === "index") {
+    return INDEX_TABLE_FIELDS.find((f) => f.fieldKey === col.fieldKey)?.label ?? col.fieldKey;
+  }
+  return draft.fields.find((f) => f.key === col.fieldKey)?.label ?? col.label;
+}
+
 export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext): void {
   const draft = ctx.getDraft();
   parent.replaceChildren();
   parent.append(
     hint(
-      "Nur die Datensatz-Tabelle: welche Spalten erscheinen („In Tabelle“). Felder selbst → Feldkatalog. Detail-Layout → Detailformular.",
+      "Welche Felder als Spalten in der Datensatz-Liste erscheinen und in welcher Reihenfolge. Bezeichnungen kommen aus dem Feldkatalog.",
     ),
   );
 
   const header = document.createElement("div");
   header.className = "schema-editor-liste-header";
-  header.innerHTML = "<span></span><span>Label</span><span>Feld</span><span>In Tabelle</span>";
+  header.innerHTML = "<span></span><span>Bezeichnung</span><span>Feld</span><span>In Tabelle</span>";
   parent.append(header);
 
   const list = document.createElement("div");
@@ -35,7 +43,7 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
   const { configured, available } = listTableColumnLayout(draft);
 
   configured.forEach(({ col, hidden }, idx) => {
-    list.append(renderConfiguredRow(col, idx, hidden, draft.tableColumns.length, ctx));
+    list.append(renderConfiguredRow(draft, col, idx, hidden, draft.tableColumns.length, ctx));
   });
 
   for (const cand of available) {
@@ -50,6 +58,7 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
 }
 
 function renderConfiguredRow(
+  draft: DatasetSchemaDefinition,
   col: TableColumnDef,
   idx: number,
   hidden: boolean,
@@ -73,43 +82,13 @@ function renderConfiguredRow(
     }),
   );
 
-  const labelIn = document.createElement("input");
-  labelIn.className = "field";
-  labelIn.value = col.label;
-  labelIn.setAttribute("aria-label", "Spaltenlabel");
-  labelIn.addEventListener("change", () => {
-    col.label = labelIn.value;
-  });
+  const label = document.createElement("span");
+  label.className = "schema-editor-toggle-label";
+  label.textContent = columnDisplayLabel(draft, col);
 
-  const keySel = document.createElement("select");
-  keySel.className = "field";
-  const draft = ctx.getDraft();
-  for (const opt of columnKeyOptions(draft)) {
-    const o = document.createElement("option");
-    o.value = opt.key;
-    o.textContent = `${opt.key} (${opt.source})`;
-    keySel.append(o);
-  }
-  keySel.value = col.fieldKey;
-  keySel.addEventListener("change", () => {
-    const d = ctx.getDraft();
-    const current = d.tableColumns[idx]!;
-    const oldId = tableColumnId(current);
-    const pick = columnKeyOptions(d).find((o) => o.key === keySel.value);
-    current.fieldKey = keySel.value;
-    current.source = pick?.source ?? "meta";
-    const newId = tableColumnId(current);
-    if (oldId !== newId && d.hiddenTableColumnKeys?.length) {
-      const hid = new Set(d.hiddenTableColumnKeys);
-      if (hid.has(oldId)) {
-        hid.delete(oldId);
-        hid.add(newId);
-      }
-      if (hid.size) d.hiddenTableColumnKeys = [...hid];
-      else delete d.hiddenTableColumnKeys;
-    }
-    ctx.rerender();
-  });
+  const keyBadge = document.createElement("span");
+  keyBadge.className = "schema-editor-liste-key";
+  keyBadge.textContent = `${col.fieldKey} (${col.source ?? "meta"})`;
 
   const visCell = document.createElement("div");
   const protectedCol = isProtectedTableColumn(col);
@@ -120,9 +99,10 @@ function renderConfiguredRow(
     visCell.append(tag);
   } else {
     visCell.append(
-      toggleSwitch(!hidden, `Spalte ${col.label} in Tabelle`, (visible) => {
+      toggleSwitch(!hidden, `Spalte ${label.textContent} in Tabelle`, (visible) => {
         const d = ctx.getDraft();
-        const id = tableColumnId(col);
+        const current = d.tableColumns[idx]!;
+        const id = tableColumnId(current);
         const next = applyTableColumnHidden(d, id, !visible);
         ctx.setDraft(next);
         ctx.rerender();
@@ -130,7 +110,7 @@ function renderConfiguredRow(
     );
   }
 
-  row.append(moves, labelIn, keySel, visCell);
+  row.append(moves, label, keyBadge, visCell);
   return row;
 }
 
@@ -143,7 +123,7 @@ function renderAvailableRow(cand: TableColumnCandidate, ctx: ListeRenderContext)
   const dash = document.createElement("span");
   dash.className = "schema-editor-liste-idle";
   dash.textContent = "—";
-  dash.title = "Reihenfolge gilt nach dem Einschalten";
+  dash.title = "Sortierbar nach Aktivierung";
   moves.append(dash);
 
   const label = document.createElement("span");
