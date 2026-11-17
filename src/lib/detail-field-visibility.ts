@@ -37,3 +37,12 @@ export function setSchemaDetailFieldVisible(
 export function visibleSchemaFieldDefs(draft: DatasetSchemaDefinition): SchemaFieldDef[] {
   return draft.fields.filter((f) => isDetailFieldVisibleInSchema(draft, f.key));
 }
+
+/** Detailansicht: nur Schema-Konfiguration, nicht meta.json. */
+export function hiddenDetailFieldKeysForSchema(schema: DatasetSchemaDefinition): Set<string> {
+  const hidden = new Set<string>();
+  for (const def of schema.fields) {
+    if (!isDetailFieldVisibleInSchema(schema, def.key)) hidden.add(def.key);
+  }
+  return hidden;
+}

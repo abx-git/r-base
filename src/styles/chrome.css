@@ -575,6 +575,47 @@
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.layout-chip-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.2rem 0.45rem 0.2rem 0.3rem;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 0.78rem;
+}
+
+.layout-chip-wrap.is-dragging {
+  opacity: 0.55;
+}
+
+.layout-chip-handle {
+  flex-shrink: 0;
+  cursor: grab;
+  color: var(--muted, #71717a);
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.15rem 0.1rem;
+  user-select: none;
+  touch-action: none;
+}
+
+.layout-chip-handle:active {
+  cursor: grabbing;
+}
+
+.layout-chip-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+  user-select: text;
+  cursor: default;
+}
+
+/* Legacy: direkte Chips ohne Griff */
 .layout-chip {
   display: inline-block;
   padding: 0.25rem 0.45rem;
@@ -582,7 +623,6 @@
   background: var(--panel);
   border: 1px solid var(--line);
   font-size: 0.78rem;
-  cursor: grab;
 }
 
 .layout-row {
@@ -707,6 +747,18 @@
   gap: 0.25rem;
   font-size: 0.85rem;
   margin-bottom: 0.55rem;
+}
+
+.settings-check-row {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.settings-check-row input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
 }
 
 .settings-btn-row {

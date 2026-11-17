@@ -18,6 +18,7 @@ import {
   mkBtn,
   moveContainerInRow,
   moveFieldInContainer,
+  removeFieldFromAllExportContainers,
 } from "./schema-editor-shared";
 import { renderFieldPlacementList } from "./schema-editor-placement";
 
@@ -99,7 +100,7 @@ export function renderExportformular(parent: HTMLElement, ctx: ExportRenderConte
   unplacedTitle.textContent = "Nicht platziert";
   unplaced.append(unplacedTitle);
   const unplacedZone = document.createElement("div");
-  unplacedZone.className = "layout-dropzone layout-dropzone--compact";
+  unplacedZone.className = "layout-dropzone layout-dropzone--compact schema-editor-dropzone";
   unplacedZone.dataset.containerId = EXPORT_UNPLACED_DROP_ID;
   for (const key of getVisibleUnassignedExportFieldKeys(draft)) {
     unplacedZone.append(fieldChip(key, draft));
@@ -234,7 +235,7 @@ function renderExportContainer(
   box.append(head);
 
   const zone = document.createElement("div");
-  zone.className = "layout-dropzone layout-dropzone--compact";
+  zone.className = "layout-dropzone layout-dropzone--compact schema-editor-dropzone";
   zone.dataset.containerId = container.id;
   for (const key of container.fieldKeys) {
     if (!draft.fields.some((f) => f.key === key)) continue;
@@ -370,8 +371,14 @@ function renderFieldRow(
   const row = document.createElement("div");
   row.className = "schema-editor-field-row";
   const idx = container.fieldKeys.indexOf(key);
+  const poolBtn = mkBtn("↩", false, () => {
+    removeFieldFromAllExportContainers(draft, key);
+    rerender();
+  });
+  poolBtn.title = "Nach „Nicht platziert“";
   row.append(
     fieldChip(key, draft),
+    poolBtn,
     mkBtn("↑", idx <= 0, () => {
       moveFieldInContainer(container, key, -1);
       rerender();

@@ -12,7 +12,7 @@ import {
   loadSystemSchemaConfig,
   resolveSchemaForDataset,
 } from "../lib/dataset-schema-store";
-import { persistCurrentProjectConfig } from "../lib/project-config";
+import { getProjectUiSettings, persistCurrentProjectConfig, setProjectUiSettings } from "../lib/project-config";
 import { openSchemaEditorModal } from "./schema-editor-modal";
 import { appState, patchState } from "../state";
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
@@ -68,6 +68,14 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
         <button type="button" class="btn" data-action="edit-dataset">Aktueller Datensatz: Sichtbarkeit…</button>
       </div>
       <p class="muted settings-hint" data-dataset-hint hidden></p>
+      <label class="settings-row settings-check-row">
+        <input type="checkbox" data-show-obsolete />
+        <span>Zusatzfelder in der Detailansicht („Felder außerhalb des Schemas“)</span>
+      </label>
+      <p class="muted settings-intro">
+        Wenn aktiv: ausklappbarer Bereich unter dem Schema-Formular. Liegt in
+        <code>r-base.project.json</code> unter <code>settings.ui</code>.
+      </p>
     </section>
 
     <section class="settings-section">
@@ -148,6 +156,9 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
     });
   };
 
+  const showObsoleteCb = dialog.querySelector<HTMLInputElement>("[data-show-obsolete]")!;
+  showObsoleteCb.checked = getProjectUiSettings().showObsoleteFieldsInDetail;
+
   listSchemaSelect.addEventListener("change", () => {
     const id = listSchemaSelect.value.trim();
     patchState({ listViewSchemaId: id === getDefaultSchemaId() ? null : id });
@@ -188,8 +199,11 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
     void (async () => {
       setWebDavSettings({ baseUrl: baseUrl.value, username: username.value });
       setWebDavPassword(password.value);
+      const ui = { showObsoleteFieldsInDetail: showObsoleteCb.checked };
+      setProjectUiSettings(ui);
       try {
-        await persistCurrentProjectConfig(loadSystemSchemaConfig(), getWebDavSettings());
+        await persistCurrentProjectConfig(loadSystemSchemaConfig(), getWebDavSettings(), ui);
+        handlers.onRerender();
         status.textContent = "Gespeichert (inkl. r-base.project.json im Stammordner).";
       } catch (e) {
         status.textContent = e instanceof Error ? e.message : String(e);

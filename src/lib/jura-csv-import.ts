@@ -22,7 +22,6 @@ import {
   getDefaultSchemaId,
   resolveSchemaForDataset,
 } from "./dataset-schema-store";
-import { applySchemaDefaultHiddenDetailFields } from "./meta-hidden-fields";
 import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
 import { getDirectoryAtPath, writeFileInFolder } from "./workspace";
 
@@ -146,7 +145,6 @@ export async function importJuraCsvFile(
         kategorie: row.sammlung?.trim() || "",
       });
       applyJuraRowToMeta(scan, row, schemaId);
-      applySchemaDefaultHiddenDetailFields(scan.meta, mergedSchema);
       applyImportTag(scan.meta, importTag);
       await writeMetaToFolder(scan.handle, scan.meta);
       scans = [...scans, scan];

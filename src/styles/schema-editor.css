@@ -508,10 +508,9 @@
   margin-bottom: 0.2rem;
 }
 
-.schema-editor-field-row .layout-chip {
+.schema-editor-field-row .layout-chip-wrap {
   flex: 1 1 auto;
   min-width: 0;
-  cursor: grab;
 }
 
 .schema-editor-field-row .btn {
@@ -523,6 +522,22 @@
 .layout-dropzone--compact {
   padding: 0.35rem;
   min-height: 2.5rem;
+}
+
+.schema-editor-dropzone {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.schema-editor-dropzone .schema-editor-field-row {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.schema-editor-dropzone .layout-chip-wrap {
+  width: 100%;
 }
 
 .schema-editor-collapsible {

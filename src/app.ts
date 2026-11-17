@@ -51,7 +51,9 @@ import { openSchemaPdfExportModal } from "./ui/schema-export-modal";
 import { filterScansByRecordFilter } from "./lib/record-filter";
 import {
   bindProjectRoot,
+  getProjectUiSettings,
   readProjectConfigFromRoot,
+  setProjectUiSettings,
   writeProjectConfigToRoot,
   type ProjectConfigFile,
 } from "./lib/project-config";
@@ -64,13 +66,14 @@ async function applyProjectConfigFromRoot(root: FileSystemDirectoryHandle): Prom
     const bootstrap: ProjectConfigFile = {
       configVersion: 1,
       schemas: loadSystemSchemaConfig(),
-      settings: { webdav: getWebDavSettings() },
+      settings: { webdav: getWebDavSettings(), ui: getProjectUiSettings() },
     };
     await writeProjectConfigToRoot(root, bootstrap);
     file = bootstrap;
   }
   installSystemSchemaConfig(file.schemas);
   setWebDavSettings(file.settings?.webdav ?? { baseUrl: "", username: "" });
+  setProjectUiSettings(file.settings?.ui ?? {});
 }
 
 async function reloadFromDisk(): Promise<void> {

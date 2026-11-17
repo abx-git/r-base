@@ -223,17 +223,35 @@ export const DETAIL_UNPLACED_DROP_ID = "__unplaced__";
 export const EXPORT_UNPLACED_DROP_ID = "__export_unplaced__";
 
 export function fieldChip(key: string, draft: DatasetSchemaDefinition): HTMLElement {
-  const chip = document.createElement("span");
-  chip.className = "layout-chip";
-  chip.draggable = true;
-  chip.dataset.fieldKey = key;
+  const wrap = document.createElement("div");
+  wrap.className = "layout-chip-wrap";
+  wrap.dataset.fieldKey = key;
+
+  const handle = document.createElement("span");
+  handle.className = "layout-chip-handle";
+  handle.textContent = "⠿";
+  handle.setAttribute("role", "button");
+  handle.setAttribute("aria-label", "Feld verschieben");
+  handle.title = "Halten und in andere Zone ziehen";
+  handle.draggable = true;
+
+  const label = document.createElement("span");
+  label.className = "layout-chip-label";
   const def = draft.fields.find((f) => f.key === key);
-  chip.textContent = def ? `${def.label} (${key})` : key;
-  chip.addEventListener("dragstart", (e) => {
+  label.textContent = def ? `${def.label} (${key})` : key;
+
+  const onDragStart = (e: DragEvent) => {
     e.dataTransfer?.setData("text/field-key", key);
-    e.dataTransfer!.effectAllowed = "move";
-  });
-  return chip;
+    e.dataTransfer?.setData("text/plain", key);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    wrap.classList.add("is-dragging");
+  };
+  const onDragEnd = () => wrap.classList.remove("is-dragging");
+  handle.addEventListener("dragstart", onDragStart);
+  handle.addEventListener("dragend", onDragEnd);
+
+  wrap.append(handle, label);
+  return wrap;
 }
 
 export function enableExportDrop(

@@ -27,7 +27,8 @@ import {
 } from "../lib/meta-field-access";
 import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
-import { resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
+import { hiddenDetailFieldKeysForSchema } from "../lib/detail-field-visibility";
+import { getProjectUiSettings } from "../lib/project-config";
 import { isFilesLayoutContainer } from "../lib/detail-layout";
 import { getVisibleUnassignedDetailFieldKeys } from "../lib/field-placement-editor";
 import { visibleTableColumns } from "../lib/table-layout";
@@ -861,16 +862,18 @@ function renderObsoleteFieldsSection(
   schema: DatasetSchemaDefinition,
   handlers: ShellHandlers,
 ): void {
+  if (!getProjectUiSettings().showObsoleteFieldsInDetail) return;
+
   const entries = listObsoleteFields(scan.meta, schema);
   if (!entries.length) return;
 
-  const section = el("section", "obsolete-fields schema-form-container");
-  const heading = el("h3", "schema-container-title");
-  heading.textContent = `Felder außerhalb des Schemas (${entries.length})`;
+  const details = el("details", "obsolete-fields schema-form-container");
+  const summary = el("summary", "obsolete-fields-summary");
+  summary.textContent = `Felder außerhalb des Schemas (${entries.length})`;
   const body = el("div", "obsolete-fields-body");
   const hint = el("p", "muted obsolete-hint");
   hint.textContent =
-    "Diese Werte bleiben in meta.json erhalten. Schema-Änderungen (Umbenennung, Entfernen) löschen sie nicht.";
+    "Schlüssel in meta.json, die nicht im Feldkatalog stehen. Werte bleiben erhalten; Umbenennung im Schema löscht sie nicht.";
   body.append(hint);
 
   for (const entry of entries) {
@@ -905,8 +908,8 @@ function renderObsoleteFieldsSection(
     body.append(row);
   }
 
-  section.append(heading, body);
-  parent.append(section);
+  details.append(summary, body);
+  parent.append(details);
 }
 
 function dateInputValue(iso: string | null | undefined): string {
@@ -1206,7 +1209,7 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
-  const hiddenKeys = resolveDetailHiddenKeys(scan.meta, schema);
+  const hiddenKeys = hiddenDetailFieldKeysForSchema(schema);
   const detailForm = renderSchemaDetailForm(main, scan, schema, handlers, {
     renderFiles: (parent, s) => renderDatasetFilesSection(parent, s, handlers),
     hiddenFieldKeys: hiddenKeys,

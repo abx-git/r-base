@@ -160,12 +160,24 @@
   grid-column: 1 / -1;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 0.55rem 0.7rem 0.65rem;
+  padding: 0.45rem 0.7rem 0.55rem;
   background: var(--control);
 }
 
-.obsolete-fields .schema-container-title {
-  margin: 0 0 0.35rem;
+.obsolete-fields-summary {
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+}
+
+.obsolete-fields-summary::-webkit-details-marker {
+  display: none;
+}
+
+.obsolete-fields[open] .obsolete-fields-summary {
+  margin-bottom: 0.35rem;
 }
 
 .obsolete-fields-body {

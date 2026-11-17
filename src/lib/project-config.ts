@@ -8,9 +8,29 @@ export const PROJECT_CONFIG_FILENAME = "r-base.project.json";
 
 export const PROJECT_CONFIG_VERSION = 1 as const;
 
+export type ProjectUiSettings = {
+  /** Zusatzfelder aus meta.json, die nicht im Feldkatalog stehen. */
+  showObsoleteFieldsInDetail: boolean;
+};
+
 export type ProjectSettings = {
   webdav: WebDavSettings;
+  ui?: ProjectUiSettings;
 };
+
+const DEFAULT_UI: ProjectUiSettings = {
+  showObsoleteFieldsInDetail: true,
+};
+
+let projectUi: ProjectUiSettings = { ...DEFAULT_UI };
+
+export function getProjectUiSettings(): ProjectUiSettings {
+  return { ...projectUi };
+}
+
+export function setProjectUiSettings(partial: Partial<ProjectUiSettings>): void {
+  projectUi = { ...projectUi, ...partial };
+}
 
 export type ProjectConfigFile = {
   configVersion: typeof PROJECT_CONFIG_VERSION;
@@ -28,8 +48,18 @@ export function getBoundProjectRoot(): FileSystemDirectoryHandle | null {
   return boundRoot;
 }
 
+function parseUiSettings(raw: unknown): ProjectUiSettings {
+  if (!isRecord(raw)) return { ...DEFAULT_UI };
+  return {
+    showObsoleteFieldsInDetail:
+      typeof raw.showObsoleteFieldsInDetail === "boolean"
+        ? raw.showObsoleteFieldsInDetail
+        : DEFAULT_UI.showObsoleteFieldsInDetail,
+  };
+}
+
 function defaultSettings(): ProjectSettings {
-  return { webdav: { baseUrl: "", username: "" } };
+  return { webdav: { baseUrl: "", username: "" }, ui: { ...DEFAULT_UI } };
 }
 
 function defaultProjectConfig(): ProjectConfigFile {
@@ -61,7 +91,10 @@ function parseProjectConfig(raw: unknown): ProjectConfigFile | null {
   }
   const settingsRaw = raw.settings;
   const settings: ProjectSettings = isRecord(settingsRaw)
-    ? { webdav: parseWebDavSettings(settingsRaw.webdav) }
+    ? {
+        webdav: parseWebDavSettings(settingsRaw.webdav),
+        ui: parseUiSettings(settingsRaw.ui),
+      }
     : defaultSettings();
   return {
     configVersion: PROJECT_CONFIG_VERSION,
@@ -113,13 +146,18 @@ export async function loadOrCreateProjectConfig(
 export async function persistCurrentProjectConfig(
   schemas: SystemSchemaConfig,
   webdav: WebDavSettings,
+  ui: ProjectUiSettings = getProjectUiSettings(),
 ): Promise<void> {
   const root = boundRoot;
   if (!root) return;
+  setProjectUiSettings(ui);
   const file: ProjectConfigFile = {
     configVersion: PROJECT_CONFIG_VERSION,
     schemas,
-    settings: { webdav: { baseUrl: webdav.baseUrl.trim(), username: webdav.username.trim() } },
+    settings: {
+      webdav: { baseUrl: webdav.baseUrl.trim(), username: webdav.username.trim() },
+      ui: { ...getProjectUiSettings() },
+    },
   };
   await writeProjectConfigToRoot(root, file);
 }

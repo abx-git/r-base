@@ -107,13 +107,12 @@ export function setSchemaFieldHidden(
   writeStringListToMeta(meta, SHOWN_FIELDS_DATA_KEY, [...shownSet]);
 }
 
+/** @deprecated Sichtbarkeit nur noch im Schema (defaultHiddenDetailFieldKeys), nicht in meta.json. */
 export function applySchemaDefaultHiddenDetailFields(
-  meta: DatasetMeta,
-  schema: DatasetSchemaDefinition,
+  _meta: DatasetMeta,
+  _schema: DatasetSchemaDefinition,
 ): void {
-  for (const key of schema.defaultHiddenDetailFieldKeys ?? []) {
-    setSchemaFieldHidden(meta, schema, key, true);
-  }
+  /* no-op */
 }
 
 export function orderedSchemaFieldKeys(schema: DatasetSchemaDefinition): string[] {

@@ -2,10 +2,6 @@ import type { DatasetMeta } from "../lib/meta-schema";
 import type { DatasetSchemaDefinition, LayoutContainer } from "../lib/dataset-schema-types";
 import { fieldDefByKey } from "../lib/meta-field-access";
 import {
-  isOptionalSchemaField,
-  resolveDetailHiddenKeys,
-} from "../lib/meta-hidden-fields";
-import {
   FILES_LAYOUT_CONTAINER_ID,
   isFilesLayoutContainer,
   layoutHasFilesContainer,
@@ -22,7 +18,7 @@ import {
   mkBtn,
   moveContainerInRow,
   moveFieldInContainer,
-  toggleSwitch,
+  removeFieldFromAllContainers,
 } from "./schema-editor-shared";
 import { renderDetailVisibilityList } from "./schema-editor-placement";
 
@@ -48,7 +44,7 @@ const WIDTH_PRESETS: { value: number; label: string }[] = [
 ];
 
 export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderContext): void {
-  const { draft, datasetContext, rerender } = ctx;
+  const { draft, rerender } = ctx;
   consolidateDetailLayout(draft);
   const row = ensureDetailLayoutRow(draft);
   if (!row.containers.length) {
@@ -61,45 +57,6 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
   }
 
   parent.replaceChildren();
-
-  if (datasetContext) {
-    const card = document.createElement("section");
-    card.className = "schema-editor-card";
-    const title = document.createElement("h3");
-    title.className = "schema-editor-section-title";
-    title.textContent = "Ausnahme: dieser Datensatz";
-    card.append(
-      title,
-      hint(
-        "Überschreibt die Schema-Sichtbarkeit nur für diesen Datensatz — wird in meta.json gespeichert.",
-      ),
-    );
-    const meta = datasetContext.getMeta();
-    const hiddenDetail =
-      meta !== undefined ? resolveDetailHiddenKeys(meta, draft) : new Set<string>();
-    for (const def of draft.fields) {
-      if (!isOptionalSchemaField(def)) continue;
-      const toggleRow = document.createElement("div");
-      toggleRow.className = "schema-editor-toggle-row";
-      const label = document.createElement("span");
-      label.className = "schema-editor-toggle-label";
-      label.textContent = def.label;
-      const isHidden = hiddenDetail.has(def.key);
-      toggleRow.append(
-        label,
-        toggleSwitch(!isHidden, `${def.label} im Detail anzeigen`, (visible) => {
-          const latestMeta = datasetContext.getMeta();
-          if (!latestMeta) return;
-          void datasetContext.onSetFieldHidden(def.key, !visible, draft).then(() => {
-            datasetContext.onRerender();
-            rerender();
-          });
-        }),
-      );
-      card.append(toggleRow);
-    }
-    parent.append(card);
-  }
 
   const visibilityTitle = document.createElement("h3");
   visibilityTitle.className = "schema-editor-section-title";
@@ -132,7 +89,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
   unplacedTitle.textContent = "Nicht platziert";
   unplaced.append(unplacedTitle);
   const unplacedZone = document.createElement("div");
-  unplacedZone.className = "layout-dropzone layout-dropzone--compact";
+  unplacedZone.className = "layout-dropzone layout-dropzone--compact schema-editor-dropzone";
   unplacedZone.dataset.containerId = DETAIL_UNPLACED_DROP_ID;
   for (const key of getVisibleUnassignedDetailFieldKeys(draft)) {
     unplacedZone.append(fieldChip(key, draft));
@@ -254,7 +211,7 @@ function renderContainer(
   box.append(head);
 
   const zone = document.createElement("div");
-  zone.className = "layout-dropzone layout-dropzone--compact";
+  zone.className = "layout-dropzone layout-dropzone--compact schema-editor-dropzone";
   zone.dataset.containerId = container.id;
   for (const key of container.fieldKeys) {
     if (!draft.fields.some((f) => f.key === key)) continue;
@@ -338,8 +295,14 @@ function renderFieldRow(
   const row = document.createElement("div");
   row.className = "schema-editor-field-row";
   const idx = container.fieldKeys.indexOf(key);
+  const poolBtn = mkBtn("↩", false, () => {
+    removeFieldFromAllContainers(draft, key);
+    rerender();
+  });
+  poolBtn.title = "Nach „Nicht platziert“";
   row.append(
     fieldChip(key, draft),
+    poolBtn,
     mkBtn("↑", idx <= 0, () => {
       moveFieldInContainer(container, key, -1);
       rerender();
