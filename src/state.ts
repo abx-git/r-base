@@ -41,8 +41,10 @@ export type AppState = {
 };
 
 type Listener = () => void;
+type PersistIndicatorListener = () => void;
 
 const listeners = new Set<Listener>();
+const persistIndicatorListeners = new Set<PersistIndicatorListener>();
 
 const BANNER_DISMISS_MS = 6_000;
 const PERSIST_SAVED_IDLE_MS = 5_000;
@@ -60,8 +62,7 @@ function schedulePersistSavedIdle(): void {
   persistIdleTimer = setTimeout(() => {
     persistIdleTimer = undefined;
     if (appState.persistStatus !== "saved") return;
-    Object.assign(appState, { persistStatus: "idle" as PersistStatus });
-    for (const l of listeners) l();
+    patchPersistStatus("idle");
   }, PERSIST_SAVED_IDLE_MS);
 }
 
@@ -122,28 +123,42 @@ export function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/** Speicher-Icon in der Kopfzeile — ohne komplette UI neu zu rendern. */
+export function subscribePersistIndicator(listener: PersistIndicatorListener): () => void {
+  persistIndicatorListeners.add(listener);
+  return () => persistIndicatorListeners.delete(listener);
+}
+
+export function patchPersistStatus(status: PersistStatus): void {
+  if (appState.persistStatus === status) return;
+  appState.persistStatus = status;
+  if (status === "saved") schedulePersistSavedIdle();
+  else if (status === "dirty" || status === "saving") clearPersistIdleTimer();
+  else if (status === "idle") clearPersistIdleTimer();
+  for (const l of persistIndicatorListeners) l();
+}
+
 export function patchState(partial: Partial<AppState>): void {
-  Object.assign(appState, partial);
-  if ("message" in partial || "error" in partial) {
+  const { persistStatus, ...rest } = partial;
+  if (persistStatus !== undefined) patchPersistStatus(persistStatus);
+  const restKeys = Object.keys(rest) as (keyof AppState)[];
+  if (!restKeys.length) return;
+
+  Object.assign(appState, rest);
+  if ("message" in rest || "error" in rest) {
     if (appState.message || appState.error) scheduleBannerDismiss();
     else clearBannerDismissTimer();
-  }
-  if ("persistStatus" in partial) {
-    if (appState.persistStatus === "saved") schedulePersistSavedIdle();
-    else if (appState.persistStatus === "dirty" || appState.persistStatus === "saving") {
-      clearPersistIdleTimer();
-    }
   }
   for (const l of listeners) l();
 }
 
 export async function withPersistStatus(work: () => Promise<void>): Promise<void> {
-  patchState({ persistStatus: "saving" });
+  patchPersistStatus("saving");
   try {
     await work();
-    patchState({ persistStatus: "saved" });
+    patchPersistStatus("saved");
   } catch (e) {
-    patchState({ persistStatus: "dirty" });
+    patchPersistStatus("dirty");
     throw e;
   }
 }

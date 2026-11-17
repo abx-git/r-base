@@ -1,4 +1,4 @@
-import { appState, patchState } from "../state";
+import { appState, patchPersistStatus } from "../state";
 
 export type MetaSaveFlush = (fieldKey: string, value: unknown) => Promise<void>;
 
@@ -12,9 +12,14 @@ export function bindMetaAutoSave(flush: MetaSaveFlush): void {
   flushImpl = flush;
 }
 
+/** Noch nicht auf Platte — Anzeige im Formular bis zum Flush. */
+export function getDraftFieldValue(fieldKey: string): unknown | undefined {
+  return pendingValues.get(fieldKey);
+}
+
 export function markPersistDirty(): void {
-  if (appState.persistStatus === "saving") return;
-  patchState({ persistStatus: "dirty" });
+  if (appState.persistStatus === "saving" || appState.persistStatus === "dirty") return;
+  patchPersistStatus("dirty");
 }
 
 export function queueMetaFieldSave(fieldKey: string, value: unknown): void {
@@ -43,13 +48,13 @@ async function flushMetaField(fieldKey: string): Promise<void> {
   if (!flushImpl) return;
   const value = pendingValues.get(fieldKey);
   if (value === undefined) return;
-  pendingValues.delete(fieldKey);
-  patchState({ persistStatus: "saving" });
+  patchPersistStatus("saving");
   try {
     await flushImpl(fieldKey, value);
-    patchState({ persistStatus: "saved" });
+    if (pendingValues.get(fieldKey) === value) pendingValues.delete(fieldKey);
+    patchPersistStatus("saved");
   } catch (e) {
-    patchState({ persistStatus: "dirty" });
+    patchPersistStatus("dirty");
     throw e;
   }
 }

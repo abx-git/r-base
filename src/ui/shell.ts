@@ -1,4 +1,5 @@
-import { appState, dismissBanners, getSelectedScan, patchState, subscribe } from "../state";
+import { getDraftFieldValue } from "../lib/meta-auto-save";
+import { appState, dismissBanners, getSelectedScan, patchState, subscribe, subscribePersistIndicator } from "../state";
 import type { IndexRecord } from "../lib/db-index";
 import { normalizeDatasetTags } from "../lib/dataset-tags";
 import { filterRecordsAdvanced, hasActiveRecordFilter, type RecordFilterState } from "../lib/record-filter";
@@ -59,6 +60,33 @@ function restoreSidebarFocus(root: HTMLElement, saved: SidebarFocus | null): voi
   }
 }
 
+type DetailFocus = { fieldKey: string; start: number | null; end: number | null };
+
+function captureDetailFocus(): DetailFocus | null {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return null;
+  if (!el.closest(".main-pane")) return null;
+  const fieldKey = el.getAttribute("data-field-key");
+  if (!fieldKey) return null;
+  return { fieldKey, start: el.selectionStart, end: el.selectionEnd };
+}
+
+function restoreDetailFocus(root: HTMLElement, saved: DetailFocus | null): void {
+  if (!saved) return;
+  const el = root.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    `.main-pane [data-field-key="${CSS.escape(saved.fieldKey)}"]`,
+  );
+  if (!el) return;
+  el.focus();
+  try {
+    if (saved.start !== null && saved.end !== null) {
+      el.setSelectionRange(saved.start, saved.end);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Platzhalter beim Fokus ausblenden, beim Blur zurück (wenn leer). */
 function displayBezeichnungValue(raw: unknown): string {
   const s = typeof raw === "string" ? raw.trim() : "";
@@ -67,6 +95,7 @@ function displayBezeichnungValue(raw: unknown): string {
 }
 
 function wireBezeichnungField(field: HTMLInputElement | HTMLTextAreaElement, handlers: ShellHandlers): void {
+  field.setAttribute("data-field-key", "bezeichnung");
   field.placeholder = DEFAULT_BEZEICHNUNG_HINT;
   wirePlaceholderFocus(field);
   field.addEventListener("focus", () => {
@@ -95,8 +124,8 @@ function wireMetaDraftCommit(
   field.addEventListener("change", () => handlers.onMetaFieldCommit(fieldKey, read()));
 }
 
-function renderPersistStatus(actions: HTMLElement): void {
-  if (!appState.ready || appState.persistStatus === "idle") return;
+function buildPersistIndicator(): HTMLElement | null {
+  if (!appState.ready || appState.persistStatus === "idle") return null;
   const ind = el("span", `chrome-persist chrome-persist--${appState.persistStatus}`);
   ind.setAttribute("aria-live", "polite");
   switch (appState.persistStatus) {
@@ -113,9 +142,20 @@ function renderPersistStatus(actions: HTMLElement): void {
       ind.title = "Lokal gespeichert";
       break;
     default:
-      return;
+      return null;
   }
-  actions.append(ind);
+  return ind;
+}
+
+function syncChromePersistIndicator(): void {
+  const actions = document.querySelector<HTMLElement>(".chrome-actions");
+  if (!actions) return;
+  actions.querySelector(".chrome-persist")?.remove();
+  const indicator = buildPersistIndicator();
+  if (!indicator) return;
+  const menu = actions.querySelector(".chrome-menu");
+  if (menu) actions.insertBefore(indicator, menu);
+  else actions.append(indicator);
 }
 
 function wirePlaceholderFocus(field: HTMLInputElement | HTMLTextAreaElement): void {
@@ -259,7 +299,8 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   });
 
   menu.append(menuToggle, panel);
-  renderPersistStatus(actions);
+  const persistInd = buildPersistIndicator();
+  if (persistInd) actions.append(persistInd);
   actions.append(menu);
   header.append(title, actions);
 
@@ -593,9 +634,11 @@ function renderSchemaFieldInput(
   }
   const wrap = el("label");
   if (!options?.omitLabel) wrap.textContent = def.label;
-  const value = getMetaFieldValue(scan.meta, def.key);
+  const draftValue = getDraftFieldValue(def.key);
+  const value = draftValue !== undefined ? draftValue : getMetaFieldValue(scan.meta, def.key);
   if (def.dataType === "text") {
     const area = el("textarea", "field area");
+    area.setAttribute("data-field-key", def.key);
     area.value = formatFieldForInput(def.dataType, value);
     wireMetaDraftCommit(area, def.key, def.dataType, handlers);
     wrap.append(area);
@@ -603,6 +646,7 @@ function renderSchemaFieldInput(
     const row = el("div", "check-row");
     const check = el("input");
     check.type = "checkbox";
+    check.setAttribute("data-field-key", def.key);
     check.checked = Boolean(value);
     check.addEventListener("change", () =>
       handlers.onMetaFieldCommit(def.key, serializeFieldInput(def.dataType, "", check.checked)),
@@ -611,6 +655,7 @@ function renderSchemaFieldInput(
     wrap.append(row);
   } else if (def.dataType === "select") {
     const sel = el("select", "field");
+    sel.setAttribute("data-field-key", def.key);
     const opts = def.options?.length ? def.options : [];
     const empty = el("option");
     empty.value = "";
@@ -628,13 +673,16 @@ function renderSchemaFieldInput(
     );
     wrap.append(sel);
   } else if (def.dataType === "tags") {
-    const tags = normalizeDatasetTags(getMetaFieldValue(scan.meta, def.key));
+    const tags = normalizeDatasetTags(
+      getDraftFieldValue(def.key) ?? getMetaFieldValue(scan.meta, def.key),
+    );
     renderDatasetTagsField(parent, tags, (next) => {
       void handlers.onMetaFieldChange(def.key, next);
     });
     return;
   } else {
     const input = el("input", "field");
+    input.setAttribute("data-field-key", def.key);
     if (def.dataType === "number") input.type = "number";
     else if (def.dataType === "date") input.type = "date";
     else input.type = "text";
@@ -793,7 +841,10 @@ function renderObsoleteFieldsSection(
     const text = formatObsoleteValue(entry.value);
     if (text.length > 80 || text.includes("\n")) {
       const area = el("textarea", "field area obsolete-field-value");
-      area.value = text === "—" ? "" : text;
+      area.setAttribute("data-field-key", entry.key);
+      const draftObs = getDraftFieldValue(entry.key);
+      area.value =
+        draftObs !== undefined ? String(draftObs) : text === "—" ? "" : text;
       const readArea = () => parseObsoleteFieldInput(area.value);
       area.addEventListener("input", () => handlers.onMetaFieldDraft(entry.key, readArea()));
       area.addEventListener("change", () => handlers.onMetaFieldCommit(entry.key, readArea()));
@@ -801,7 +852,10 @@ function renderObsoleteFieldsSection(
     } else {
       const input = el("input", "field obsolete-field-value");
       input.type = "text";
-      input.value = text === "—" ? "" : text;
+      input.setAttribute("data-field-key", entry.key);
+      const draftObs = getDraftFieldValue(entry.key);
+      input.value =
+        draftObs !== undefined ? String(draftObs) : text === "—" ? "" : text;
       const readIn = () => parseObsoleteFieldInput(input.value);
       input.addEventListener("input", () => handlers.onMetaFieldDraft(entry.key, readIn()));
       input.addEventListener("change", () => handlers.onMetaFieldCommit(entry.key, readIn()));
@@ -1219,8 +1273,11 @@ let handlersRef: ShellHandlers | null = null;
 export function mountShell(container: HTMLElement, handlers: ShellHandlers): void {
   handlersRef = handlers;
   installDetailKeyboardNav();
+  subscribePersistIndicator(syncChromePersistIndicator);
+
   const render = () => {
     const sidebarFocus = captureSidebarFocus();
+    const detailFocus = captureDetailFocus();
     container.replaceChildren();
     clearPreview();
     renderMessages(container);
@@ -1234,6 +1291,7 @@ export function mountShell(container: HTMLElement, handlers: ShellHandlers): voi
     container.append(body);
     renderSyncLog(container);
     restoreSidebarFocus(container, sidebarFocus);
+    restoreDetailFocus(container, detailFocus);
   };
 
   subscribe(render);

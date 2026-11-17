@@ -98,13 +98,24 @@ async function connectFolder(): Promise<void> {
   patchState({ listViewSchemaId: null, message: "Stammordner verbunden." });
 }
 
+async function refreshIndexAfterMetaWrite(scan: DatasetScan): Promise<void> {
+  const record = recordFromScan(scan, syncStatusAfterLocalEdit());
+  const records = appState.records.map((r) => (r.locId === record.locId ? record : r));
+  await rebuildIndex(records);
+  const pendingCount = pendingLocalChanges(appState.scans);
+  patchState({
+    records,
+    globalSync: { ...appState.globalSync, pendingCount },
+  });
+}
+
 async function persistMetaFieldValue(fieldKey: string, value: unknown): Promise<void> {
   const scan = getSelectedScan();
   if (!scan) return;
   setMetaFieldValue(scan.meta, fieldKey, value);
   scan.meta.lastModified = new Date().toISOString();
   await writeMetaToFolder(scan.handle, scan.meta);
-  await reloadFromDisk();
+  await refreshIndexAfterMetaWrite(scan);
 }
 
 bindMetaAutoSave(persistMetaFieldValue);
