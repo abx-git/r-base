@@ -3,8 +3,19 @@ import type { DatasetSchemaDefinition, LayoutContainer } from "./dataset-schema-
 /** Reservierter Container: Datei-Upload in der Detailansicht (keine Felder). */
 export const FILES_LAYOUT_CONTAINER_ID = "container-files";
 
+/** Export: Felder in meta.json, die nicht im Feldkatalog stehen. */
+export const OBSOLETE_LAYOUT_CONTAINER_ID = "container-obsolete";
+
 export function isFilesLayoutContainer(container: LayoutContainer): boolean {
   return container.id === FILES_LAYOUT_CONTAINER_ID;
+}
+
+export function isObsoleteLayoutContainer(container: LayoutContainer): boolean {
+  return container.id === OBSOLETE_LAYOUT_CONTAINER_ID;
+}
+
+export function isReservedLayoutContainer(container: LayoutContainer): boolean {
+  return isFilesLayoutContainer(container) || isObsoleteLayoutContainer(container);
 }
 
 export function layoutHasFilesContainer(schema: DatasetSchemaDefinition): boolean {

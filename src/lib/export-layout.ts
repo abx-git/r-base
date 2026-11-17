@@ -1,5 +1,5 @@
 import type { DatasetSchemaDefinition, LayoutContainer, LayoutRow } from "./dataset-schema-types";
-import { isFilesLayoutContainer, layoutHasFilesContainer } from "./detail-layout";
+import { isObsoleteLayoutContainer, isFilesLayoutContainer, layoutHasFilesContainer } from "./detail-layout";
 
 export function getExportLayoutRows(schema: DatasetSchemaDefinition): LayoutRow[] {
   return schema.exportLayout?.length ? schema.exportLayout : schema.layout;
@@ -7,6 +7,10 @@ export function getExportLayoutRows(schema: DatasetSchemaDefinition): LayoutRow[
 
 export function exportLayoutHasFilesContainer(schema: DatasetSchemaDefinition): boolean {
   return getExportLayoutRows(schema).some((row) => (row.containers ?? []).some(isFilesLayoutContainer));
+}
+
+export function exportLayoutHasObsoleteContainer(schema: DatasetSchemaDefinition): boolean {
+  return getExportLayoutRows(schema).some((row) => (row.containers ?? []).some(isObsoleteLayoutContainer));
 }
 
 export function ensureExportLayoutInitialized(schema: DatasetSchemaDefinition): void {

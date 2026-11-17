@@ -46,6 +46,7 @@ import {
 import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
 import { pickSchemaIdForImport } from "./lib/schema-import-ui";
 import { openSchemaPdfExportModal } from "./ui/schema-export-modal";
+import { filterScansByRecordFilter } from "./lib/record-filter";
 import {
   bindProjectRoot,
   readProjectConfigFromRoot,
@@ -211,7 +212,9 @@ export function startApp(container: HTMLElement): void {
     },
     onSchemaPdfExport: () => {
       if (!appState.ready) return;
-      openSchemaPdfExportModal(appState.scans, (msg, isError) => {
+      const filter = { query: appState.filterQuery, tagRules: appState.filterTagRules };
+      const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
+      openSchemaPdfExportModal(scans, filter, (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
       });
     },

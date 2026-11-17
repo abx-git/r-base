@@ -11,8 +11,6 @@ import { formatObsoleteValue, listObsoleteFields } from "./meta-obsolete-fields"
 export type SchemaPdfExportOptions = {
   omitEmptyOptional?: boolean;
   includeCover?: boolean;
-  /** Felder außerhalb des Schemas ans Ende (Standard: an). */
-  includeObsolete?: boolean;
 };
 
 const PAGE_W = 210;
@@ -125,7 +123,6 @@ export async function buildSchemaPdf(
   const { jsPDF } = await import("jspdf");
   const omitEmpty = options.omitEmptyOptional !== false;
   const includeCover = options.includeCover !== false;
-  const includeObsolete = options.includeObsolete !== false;
   const datasets = scansForSchema(scans, schema);
   const exportStamp = new Date().toLocaleString("de-DE");
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
@@ -350,14 +347,13 @@ export async function buildSchemaPdf(
         }
         if (col > 0) y = rowY + rowMaxH + 4;
         y += 2;
-      }
-    }
-
-    if (includeObsolete) {
-      const obsolete = listObsoleteFields(meta, schema).filter((e) => !isEmptyValue(formatObsoleteValue(e.value)));
-      if (obsolete.length) {
-        ensureSpace(14);
-        drawSectionTitle("Außerhalb des Schemas");
+      } else if (block.kind === "obsolete") {
+        const obsolete = listObsoleteFields(meta, schema).filter(
+          (e) => !isEmptyValue(formatObsoleteValue(e.value)),
+        );
+        if (!obsolete.length) continue;
+        const sectionTitle = block.title?.trim() || "Felder außerhalb des Schemas";
+        drawSectionTitle(sectionTitle);
         for (const entry of obsolete) {
           drawFieldRow(entry.key, formatObsoleteValue(entry.value));
         }

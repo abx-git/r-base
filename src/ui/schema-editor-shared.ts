@@ -5,7 +5,7 @@ import type {
   LayoutRow,
   SchemaFieldDef,
 } from "../lib/dataset-schema-types";
-import { isFilesLayoutContainer } from "../lib/detail-layout";
+import { isFilesLayoutContainer, isReservedLayoutContainer } from "../lib/detail-layout";
 import { isDetailFieldVisibleInSchema } from "../lib/detail-field-visibility";
 import { isExportFieldVisibleInSchema } from "../lib/export-field-visibility";
 import { consolidateExportLayout, ensureExportLayoutRow, findExportContainer } from "../lib/export-layout";
@@ -247,7 +247,7 @@ export function enableExportDrop(
       return;
     }
     const container = findExportContainer(draft, targetId ?? "");
-    if (!container || isFilesLayoutContainer(container)) return;
+    if (!container || isReservedLayoutContainer(container)) return;
     if (!isExportFieldVisibleInSchema(draft, key)) return;
     if (!container.fieldKeys.includes(key)) container.fieldKeys.push(key);
     rerender();

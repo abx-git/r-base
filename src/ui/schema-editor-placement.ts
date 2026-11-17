@@ -132,7 +132,7 @@ export function renderExportVisibilityList(parent: HTMLElement, ctx: PlacementLi
 
   parent.append(
     hint(
-      "Welche Felder im PDF-Datenblatt erscheinen. Aktivierte Felder stehen unten unter „Anordnung“ (Container, „Nicht platziert“ oder „Bilder“).",
+      "Welche Felder im PDF erscheinen. Unter „Anordnung“: Container, „Nicht platziert“, optional „Bilder“ oder „Außerhalb des Schemas“.",
     ),
   );
 

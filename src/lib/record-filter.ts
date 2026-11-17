@@ -31,3 +31,13 @@ export function filterRecordsAdvanced(
 export function hasActiveRecordFilter(filter: RecordFilterState): boolean {
   return Boolean(filter.query.trim() || filter.tagRules.length);
 }
+
+/** Scans, deren Index-Zeile den aktuellen Listenfilter erfüllt. */
+export function filterScansByRecordFilter(
+  scans: DatasetScan[],
+  records: IndexRecord[],
+  filter: RecordFilterState,
+): DatasetScan[] {
+  const visible = new Set(filterRecordsAdvanced(records, filter, scans).map((r) => r.locId));
+  return scans.filter((s) => visible.has(s.meta.locId));
+}

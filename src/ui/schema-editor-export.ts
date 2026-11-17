@@ -1,9 +1,11 @@
 import type { DatasetSchemaDefinition, LayoutContainer } from "../lib/dataset-schema-types";
 import {
   FILES_LAYOUT_CONTAINER_ID,
+  OBSOLETE_LAYOUT_CONTAINER_ID,
   isFilesLayoutContainer,
+  isObsoleteLayoutContainer,
 } from "../lib/detail-layout";
-import { exportLayoutHasFilesContainer } from "../lib/export-layout";
+import { exportLayoutHasFilesContainer, exportLayoutHasObsoleteContainer } from "../lib/export-layout";
 import { getVisibleUnassignedExportFieldKeys } from "../lib/export-placement-editor";
 import { isExportFieldVisibleInSchema } from "../lib/export-field-visibility";
 import {
@@ -144,7 +146,22 @@ export function renderExportformular(parent: HTMLElement, ctx: ExportRenderConte
     });
     rerender();
   });
-  btnRow.append(addCont, addFiles);
+  const addObsolete = document.createElement("button");
+  addObsolete.type = "button";
+  addObsolete.className = "btn";
+  addObsolete.textContent = "+ Außerhalb des Schemas";
+  addObsolete.disabled = exportLayoutHasObsoleteContainer(draft);
+  addObsolete.title = "Zusatzfelder aus meta.json, die nicht im Feldkatalog stehen";
+  addObsolete.addEventListener("click", () => {
+    row.containers.push({
+      id: OBSOLETE_LAYOUT_CONTAINER_ID,
+      title: "Felder außerhalb des Schemas",
+      colSpan: 12,
+      fieldKeys: [],
+    });
+    rerender();
+  });
+  btnRow.append(addCont, addFiles, addObsolete);
   canvas.append(btnRow);
 
   layoutWrap.append(unplaced, canvas);
@@ -159,6 +176,9 @@ function renderExportContainer(
 ): HTMLElement {
   if (isFilesLayoutContainer(container)) {
     return renderExportFilesContainerEditor(container, allContainers, rerender);
+  }
+  if (isObsoleteLayoutContainer(container)) {
+    return renderExportObsoleteContainerEditor(container, allContainers, rerender);
   }
 
   const box = document.createElement("div");
@@ -223,6 +243,56 @@ function renderExportContainer(
   }
   enableExportDrop(zone, draft, rerender);
   box.append(zone);
+  return box;
+}
+
+function renderExportObsoleteContainerEditor(
+  container: LayoutContainer,
+  allContainers: LayoutContainer[],
+  rerender: () => void,
+): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "layout-container schema-editor-layout-container schema-editor-obsolete-container";
+  box.style.gridColumn = `span ${container.colSpan ?? 12}`;
+
+  const head = document.createElement("div");
+  head.className = "schema-editor-container-head";
+  const idx = allContainers.indexOf(container);
+  head.append(
+    mkBtn("←", idx <= 0, () => {
+      moveContainerInRow(allContainers, container.id, -1);
+      rerender();
+    }),
+    mkBtn("→", idx < 0 || idx >= allContainers.length - 1, () => {
+      moveContainerInRow(allContainers, container.id, 1);
+      rerender();
+    }),
+  );
+
+  const badge = document.createElement("span");
+  badge.className = "schema-editor-badge";
+  badge.textContent = "Zusatzfelder";
+  head.append(badge);
+
+  const titleIn = document.createElement("input");
+  titleIn.className = "field";
+  titleIn.placeholder = "Titel (optional)";
+  titleIn.value = container.title ?? "Felder außerhalb des Schemas";
+  titleIn.addEventListener("change", () => {
+    container.title = titleIn.value.trim();
+  });
+
+  const removeBtn = mkBtn("×", false, () => {
+    const i = allContainers.indexOf(container);
+    if (i >= 0) allContainers.splice(i, 1);
+    rerender();
+  });
+  removeBtn.classList.add("schema-editor-container-remove");
+  head.append(titleIn, removeBtn);
+  box.append(
+    head,
+    hint("Im PDF nur wenn der Datensatz solche Werte in meta.json hat — werden dort nicht gelöscht."),
+  );
   return box;
 }
 

@@ -1,10 +1,13 @@
 import type { DatasetScan } from "../lib/fs-local";
+import type { RecordFilterState } from "../lib/record-filter";
+import { hasActiveRecordFilter } from "../lib/record-filter";
 import { getSchemaById, loadSystemSchemaConfig, resolveSchemaForDataset } from "../lib/dataset-schema-store";
 import { buildSchemaPdf, schemaPdfFilename } from "../lib/schema-pdf-export";
 import { downloadBlob } from "../lib/excel-io";
 
 export function openSchemaPdfExportModal(
   scans: DatasetScan[],
+  filter: RecordFilterState,
   onStatus: (msg: string, isError?: boolean) => void,
 ): void {
   const cfg = loadSystemSchemaConfig();
@@ -25,8 +28,10 @@ export function openSchemaPdfExportModal(
 
   const intro = document.createElement("p");
   intro.className = "muted";
-  intro.textContent =
-    "Erzeugt ein PDF mit einem Datenblatt pro Datensatz — Layout und Bilder laut Tab „Exportformular“ im Schema-Editor.";
+  const filterActive = hasActiveRecordFilter(filter);
+  intro.textContent = filterActive
+    ? "PDF nur für die aktuell gefilterte Liste (Suchfeld und Tag-Filter in der Seitenleiste)."
+  : "PDF für alle Datensätze des gewählten Schemas (Layout/Bilder laut „Exportformular“).";
 
   const schemaLabel = document.createElement("label");
   schemaLabel.className = "schema-export-row";
@@ -43,6 +48,17 @@ export function openSchemaPdfExportModal(
     schemaSelect.append(opt);
   }
   schemaLabel.append(schemaSpan, schemaSelect);
+
+  let filterNote: HTMLElement | null = null;
+  if (filterActive) {
+    filterNote = document.createElement("p");
+    filterNote.className = "muted schema-export-filter-note";
+    const q = filter.query.trim();
+    const parts: string[] = [];
+    if (q) parts.push(`Suche: „${q}"`);
+    if (filter.tagRules.length) parts.push(`${filter.tagRules.length} Tag-Regel(n)`);
+    filterNote.textContent = `Filter aktiv (${parts.join(" · ")}). Es werden ${scans.length} Datensätze berücksichtigt.`;
+  }
 
   const optEmpty = document.createElement("label");
   optEmpty.className = "schema-export-check";
@@ -105,7 +121,9 @@ export function openSchemaPdfExportModal(
   });
 
   actions.append(cancelBtn, exportBtn);
-  dialog.append(title, intro, schemaLabel, optEmpty, optCover, actions);
+  dialog.append(title, intro, schemaLabel);
+  if (filterNote) dialog.append(filterNote);
+  dialog.append(optEmpty, optCover, actions);
   backdrop.append(dialog);
   document.body.append(backdrop);
   schemaSelect.focus();

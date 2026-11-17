@@ -1,5 +1,5 @@
 import type { DatasetSchemaDefinition, SchemaFieldDef } from "./dataset-schema-types";
-import { isFilesLayoutContainer } from "./detail-layout";
+import { isReservedLayoutContainer } from "./detail-layout";
 import { ensureExportLayoutInitialized } from "./export-layout";
 import { isOptionalSchemaField } from "./meta-hidden-fields";
 
@@ -7,7 +7,7 @@ function removeFieldFromAllExportContainers(draft: DatasetSchemaDefinition, key:
   ensureExportLayoutInitialized(draft);
   for (const row of draft.exportLayout ?? []) {
     for (const c of row.containers ?? []) {
-      if (isFilesLayoutContainer(c)) continue;
+      if (isReservedLayoutContainer(c)) continue;
       c.fieldKeys = (c.fieldKeys ?? []).filter((k) => k !== key);
     }
   }

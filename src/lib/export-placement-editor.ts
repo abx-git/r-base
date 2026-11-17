@@ -1,5 +1,5 @@
 import type { DatasetSchemaDefinition, LayoutContainer, LayoutRow } from "./dataset-schema-types";
-import { isFilesLayoutContainer } from "./detail-layout";
+import { isFilesLayoutContainer, isObsoleteLayoutContainer, isReservedLayoutContainer } from "./detail-layout";
 import { isExportFieldVisibleInSchema } from "./export-field-visibility";
 import { consolidateExportLayout, ensureExportLayoutInitialized, ensureExportLayoutRow } from "./export-layout";
 
@@ -8,7 +8,7 @@ function dedupeExportLayoutFieldKeys(schema: DatasetSchemaDefinition): void {
   const seen = new Set<string>();
   for (const row of schema.exportLayout ?? []) {
     for (const c of row.containers ?? []) {
-      if (isFilesLayoutContainer(c)) continue;
+      if (isReservedLayoutContainer(c)) continue;
       const keys: string[] = [];
       for (const k of c.fieldKeys ?? []) {
         if (seen.has(k)) continue;
@@ -23,7 +23,7 @@ function dedupeExportLayoutFieldKeys(schema: DatasetSchemaDefinition): void {
 function pruneInvisibleExportFieldsFromLayout(draft: DatasetSchemaDefinition): void {
   for (const row of draft.exportLayout ?? []) {
     for (const c of row.containers ?? []) {
-      if (isFilesLayoutContainer(c)) continue;
+      if (isReservedLayoutContainer(c)) continue;
       c.fieldKeys = (c.fieldKeys ?? []).filter((k) => isExportFieldVisibleInSchema(draft, k));
     }
   }
@@ -39,7 +39,7 @@ export function unassignedExportFieldKeys(draft: DatasetSchemaDefinition): strin
   const row = ensureExportLayoutRow(draft);
   const placed = new Set<string>();
   for (const c of row.containers) {
-    if (isFilesLayoutContainer(c)) continue;
+    if (isReservedLayoutContainer(c)) continue;
     for (const k of c.fieldKeys ?? []) placed.add(k);
   }
   return draft.fields.map((f) => f.key).filter((k) => !placed.has(k));
@@ -55,7 +55,7 @@ export function getExportFieldOrder(draft: DatasetSchemaDefinition): string[] {
   const seen = new Set<string>();
   const order: string[] = [];
   for (const c of row.containers) {
-    if (isFilesLayoutContainer(c)) continue;
+    if (isReservedLayoutContainer(c)) continue;
     for (const k of c.fieldKeys ?? []) {
       if (!draft.fields.some((f) => f.key === k)) continue;
       if (seen.has(k)) continue;
@@ -72,6 +72,7 @@ export function getExportFieldOrder(draft: DatasetSchemaDefinition): string[] {
 export type ExportBlock =
   | { kind: "fields"; title?: string; fieldKeys: string[] }
   | { kind: "files"; title?: string; colSpan?: number }
+  | { kind: "obsolete"; title?: string; colSpan?: number }
   | { kind: "unplaced"; fieldKeys: string[] };
 
 export function exportBlocksForSchema(schema: DatasetSchemaDefinition): ExportBlock[] {
@@ -83,6 +84,10 @@ export function exportBlocksForSchema(schema: DatasetSchemaDefinition): ExportBl
   for (const c of row.containers) {
     if (isFilesLayoutContainer(c)) {
       blocks.push({ kind: "files", title: c.title, colSpan: c.colSpan });
+      continue;
+    }
+    if (isObsoleteLayoutContainer(c)) {
+      blocks.push({ kind: "obsolete", title: c.title, colSpan: c.colSpan });
       continue;
     }
     const keys = (c.fieldKeys ?? []).filter(
