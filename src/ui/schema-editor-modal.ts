@@ -39,7 +39,7 @@ export function openSchemaEditorModal(
   const existing = getSchemaById(schemaId);
   if (!existing) return;
 
-  const original = structuredClone(existing);
+  let original = structuredClone(existing);
   let draft = structuredClone(existing);
   prepareSchemaEditorDraft(draft);
   let tab: SchemaEditorTabId = mapInitialTab(options?.initialTab, Boolean(options?.datasetContext));
@@ -65,6 +65,9 @@ export function openSchemaEditorModal(
           draft,
           setStatus: shell.setStatus,
           rerender: renderBody,
+          onSchemaPersisted: (saved) => {
+            original = saved;
+          },
         });
         break;
       case "liste":

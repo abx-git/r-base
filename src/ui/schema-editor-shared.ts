@@ -6,6 +6,8 @@ import type {
   SchemaFieldDef,
 } from "../lib/dataset-schema-types";
 import { isFilesLayoutContainer } from "../lib/detail-layout";
+import { isDetailFieldVisibleInSchema } from "../lib/detail-field-visibility";
+import { validateSchemaDefinition } from "../lib/schema-validation";
 
 export type SchemaEditorTabId = "stammdaten" | "felder" | "liste" | "detail";
 
@@ -57,18 +59,7 @@ export function validationErrorTab(err: string | null): SchemaEditorTabId | null
 }
 
 export function validateDraft(draft: DatasetSchemaDefinition): string | null {
-  if (!draft.id.trim()) return "ID fehlt.";
-  if (!draft.name.trim()) return "Name fehlt.";
-  if (!/^[A-Z0-9]{2,8}$/.test(draft.loxPrefix)) return "Prefix ungültig (2–8 Zeichen, A–Z/0–9).";
-  if (!draft.fields.some((f) => f.key === "locId")) return "Feld locId ist erforderlich.";
-  const keys = new Set<string>();
-  for (const f of draft.fields) {
-    if (keys.has(f.key)) return `Doppelter Feld-Key: ${f.key}`;
-    keys.add(f.key);
-  }
-  if (!draft.tableColumns.length) return "Mindestens eine Tabellenspalte.";
-  if (!draft.layout.length) return "Mindestens eine Layout-Zeile.";
-  return null;
+  return validateSchemaDefinition(draft);
 }
 
 export function slugId(v: string): string {
@@ -142,8 +133,9 @@ export function purgeFieldFromTable(draft: DatasetSchemaDefinition, key: string)
 
 export function removeFieldFromAllContainers(draft: DatasetSchemaDefinition, key: string): void {
   for (const row of draft.layout) {
-    for (const c of row.containers) {
-      c.fieldKeys = c.fieldKeys.filter((k) => k !== key);
+    for (const c of row.containers ?? []) {
+      if (isFilesLayoutContainer(c)) continue;
+      c.fieldKeys = (c.fieldKeys ?? []).filter((k) => k !== key);
     }
   }
 }
@@ -195,15 +187,8 @@ export function moveFieldInContainer(container: LayoutContainer, fieldKey: strin
   keys[next] = tmp;
 }
 
-export function unassignedFieldKeys(draft: DatasetSchemaDefinition): string[] {
-  const placed = new Set<string>();
-  for (const row of draft.layout) {
-    for (const c of row.containers) {
-      for (const k of c.fieldKeys) placed.add(k);
-    }
-  }
-  return draft.fields.map((f) => f.key).filter((k) => !placed.has(k));
-}
+/** Drop-Ziel für Felder ohne Container-Zuordnung (nur im Schema-Editor). */
+export const DETAIL_UNPLACED_DROP_ID = "__unplaced__";
 
 export function fieldChip(key: string, draft: DatasetSchemaDefinition): HTMLElement {
   const chip = document.createElement("span");
@@ -236,12 +221,13 @@ export function enableDrop(
     if (!key) return;
     removeFieldFromAllContainers(draft, key);
     const targetId = zone.dataset.containerId;
-    if (targetId === "__pool__") {
+    if (targetId === DETAIL_UNPLACED_DROP_ID) {
       rerender();
       return;
     }
     const container = findContainer(draft, targetId ?? "");
     if (!container || isFilesLayoutContainer(container)) return;
+    if (!isDetailFieldVisibleInSchema(draft, key)) return;
     if (!container.fieldKeys.includes(key)) container.fieldKeys.push(key);
     rerender();
   });
@@ -294,16 +280,4 @@ export function toggleSwitch(
   input.setAttribute("aria-label", ariaLabel);
   input.addEventListener("change", () => onChange(input.checked));
   return input;
-}
-
-export function toggleDraftDetailDefaultHidden(
-  draft: DatasetSchemaDefinition,
-  fieldKey: string,
-  hidden: boolean,
-): void {
-  const set = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
-  if (hidden) set.add(fieldKey);
-  else set.delete(fieldKey);
-  if (set.size) draft.defaultHiddenDetailFieldKeys = [...set];
-  else delete draft.defaultHiddenDetailFieldKeys;
 }

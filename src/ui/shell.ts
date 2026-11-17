@@ -29,6 +29,7 @@ import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } fro
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 import { resolveDetailHiddenKeys } from "../lib/meta-hidden-fields";
 import { isFilesLayoutContainer } from "../lib/detail-layout";
+import { getVisibleUnassignedDetailFieldKeys } from "../lib/field-placement-editor";
 import { visibleTableColumns } from "../lib/table-layout";
 import {
   buildMetaByLocId,
@@ -718,7 +719,7 @@ function renderSchemaDetailForm(
   schema: DatasetSchemaDefinition,
   handlers: ShellHandlers,
   options?: SchemaDetailFormOptions,
-): void {
+): HTMLDivElement {
   const layout = schema.layout.length ? schema.layout : getDefaultSchema().layout;
   const form = appendSchemaFormChunk(main);
   const hiddenKeys = options?.hiddenFieldKeys ?? new Set<string>();
@@ -781,6 +782,30 @@ function renderSchemaDetailForm(
     form.append(rowEl);
   }
 
+  const unplacedKeys = getVisibleUnassignedDetailFieldKeys(schema).filter((k) => !hiddenKeys.has(k));
+  if (unplacedKeys.length) {
+    const rowEl = el("div", "schema-form-row");
+    const box = el("section", "schema-form-container");
+    box.style.gridColumn = "span 12";
+    if (renderedFieldCount > 0) {
+      const unplacedTitle = el("h3", "schema-container-title");
+      unplacedTitle.textContent = "Nicht platziert";
+      box.append(unplacedTitle);
+    }
+    for (const key of unplacedKeys) {
+      if (renderedOnce.has(key)) continue;
+      const def = fieldDefByKey(schema.fields, key);
+      if (!def) continue;
+      renderSchemaFieldInput(box, def, scan, handlers);
+      renderedOnce.add(key);
+      renderedFieldCount++;
+    }
+    if (box.childNodes.length) {
+      rowEl.append(box);
+      form.append(rowEl);
+    }
+  }
+
   if (renderedFieldCount === 0) {
     const box = el("section", "schema-form-container");
     const title = el("h3", "schema-container-title");
@@ -799,6 +824,8 @@ function renderSchemaDetailForm(
       form.append(rowEl);
     }
   }
+
+  return form;
 }
 
 function parseObsoleteFieldInput(raw: string): unknown {
@@ -823,9 +850,9 @@ function renderObsoleteFieldsSection(
   const entries = listObsoleteFields(scan.meta, schema);
   if (!entries.length) return;
 
-  const details = el("details", "obsolete-fields");
-  const summary = el("summary");
-  summary.textContent = `Nicht im Schema enthaltene Felder (${entries.length})`;
+  const section = el("section", "obsolete-fields schema-form-container");
+  const heading = el("h3", "schema-container-title");
+  heading.textContent = `Felder außerhalb des Schemas (${entries.length})`;
   const body = el("div", "obsolete-fields-body");
   const hint = el("p", "muted obsolete-hint");
   hint.textContent =
@@ -864,8 +891,8 @@ function renderObsoleteFieldsSection(
     body.append(row);
   }
 
-  details.append(summary, body);
-  parent.append(details);
+  section.append(heading, body);
+  parent.append(section);
 }
 
 function dateInputValue(iso: string | null | undefined): string {
@@ -1166,11 +1193,11 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
 
   const schema = resolveSchemaForDataset(scan.meta);
   const hiddenKeys = resolveDetailHiddenKeys(scan.meta, schema);
-  renderSchemaDetailForm(main, scan, schema, handlers, {
+  const detailForm = renderSchemaDetailForm(main, scan, schema, handlers, {
     renderFiles: (parent, s) => renderDatasetFilesSection(parent, s, handlers),
     hiddenFieldKeys: hiddenKeys,
   });
-  renderObsoleteFieldsSection(main, scan, schema, handlers);
+  renderObsoleteFieldsSection(detailForm, scan, schema, handlers);
 
   const preview = el("div", "preview-pane");
   preview.id = "preview-pane";

@@ -3,7 +3,6 @@ import type { DatasetSchemaDefinition, LayoutContainer } from "../lib/dataset-sc
 import { fieldDefByKey } from "../lib/meta-field-access";
 import {
   isOptionalSchemaField,
-  orderedSchemaFieldKeys,
   resolveDetailHiddenKeys,
 } from "../lib/meta-hidden-fields";
 import {
@@ -11,8 +10,11 @@ import {
   isFilesLayoutContainer,
   layoutHasFilesContainer,
 } from "../lib/detail-layout";
+import { getVisibleUnassignedDetailFieldKeys } from "../lib/field-placement-editor";
+import { isDetailFieldVisibleInSchema } from "../lib/detail-field-visibility";
 import {
   consolidateDetailLayout,
+  DETAIL_UNPLACED_DROP_ID,
   enableDrop,
   ensureDetailLayoutRow,
   fieldChip,
@@ -21,9 +23,8 @@ import {
   moveContainerInRow,
   moveFieldInContainer,
   toggleSwitch,
-  unassignedFieldKeys,
 } from "./schema-editor-shared";
-import { renderFieldPlacementList, renderUnassignedDetailFields } from "./schema-editor-placement";
+import { renderDetailVisibilityList } from "./schema-editor-placement";
 
 export type DetailRenderContext = {
   draft: DatasetSchemaDefinition;
@@ -76,9 +77,8 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
     const meta = datasetContext.getMeta();
     const hiddenDetail =
       meta !== undefined ? resolveDetailHiddenKeys(meta, draft) : new Set<string>();
-    for (const key of orderedSchemaFieldKeys(draft)) {
-      const def = fieldDefByKey(draft.fields, key);
-      if (!def || !isOptionalSchemaField(def)) continue;
+    for (const def of draft.fields) {
+      if (!isOptionalSchemaField(def)) continue;
       const toggleRow = document.createElement("div");
       toggleRow.className = "schema-editor-toggle-row";
       const label = document.createElement("span");
@@ -101,16 +101,15 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
     parent.append(card);
   }
 
-  parent.append(
-    hint(
-      "Oben: platzierte Felder (Sichtbarkeit & Reihenfolge, „→ Pool“ löst die Zuordnung). Unten: Pool und Container — per Drag & Drop einordnen.",
-    ),
-  );
+  const visibilityTitle = document.createElement("h3");
+  visibilityTitle.className = "schema-editor-section-title";
+  visibilityTitle.textContent = "Sichtbarkeit im Detail";
+  parent.append(visibilityTitle);
 
-  const placementPanel = document.createElement("div");
-  placementPanel.className = "schema-editor-placement-panel";
-  parent.append(placementPanel);
-  renderFieldPlacementList(placementPanel, {
+  const visibilityPanel = document.createElement("div");
+  visibilityPanel.className = "schema-editor-placement-panel";
+  parent.append(visibilityPanel);
+  renderDetailVisibilityList(visibilityPanel, {
     mode: "detail",
     getDraft: () => draft,
     rerender,
@@ -118,26 +117,28 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
 
   const layoutTitle = document.createElement("h3");
   layoutTitle.className = "schema-editor-section-title";
-  layoutTitle.textContent = "Anordnung (Container)";
-  parent.append(layoutTitle);
+  layoutTitle.textContent = "Anordnung";
+  parent.append(
+    layoutTitle,
+    hint("Nur Felder mit „Im Detail“ aktiv. Per Drag & Drop in Container ziehen oder unter „Nicht platziert“ lassen."),
+  );
 
   const layoutWrap = document.createElement("div");
   layoutWrap.className = "schema-editor-detail-layout";
 
-  const pool = document.createElement("aside");
-  pool.className = "schema-editor-layout-pool layout-pool";
-  const poolTitle = document.createElement("strong");
-  poolTitle.textContent = "Nicht platziert";
-  pool.append(poolTitle);
-  const poolZone = document.createElement("div");
-  poolZone.className = "layout-dropzone layout-dropzone--compact";
-  poolZone.dataset.containerId = "__pool__";
-  for (const key of unassignedFieldKeys(draft)) {
-    poolZone.append(fieldChip(key, draft));
+  const unplaced = document.createElement("aside");
+  unplaced.className = "schema-editor-unplaced layout-pool";
+  const unplacedTitle = document.createElement("strong");
+  unplacedTitle.textContent = "Nicht platziert";
+  unplaced.append(unplacedTitle);
+  const unplacedZone = document.createElement("div");
+  unplacedZone.className = "layout-dropzone layout-dropzone--compact";
+  unplacedZone.dataset.containerId = DETAIL_UNPLACED_DROP_ID;
+  for (const key of getVisibleUnassignedDetailFieldKeys(draft)) {
+    unplacedZone.append(fieldChip(key, draft));
   }
-  enableDrop(poolZone, draft, rerender);
-  pool.append(poolZone);
-  renderUnassignedDetailFields(pool, draft, rerender);
+  enableDrop(unplacedZone, draft, rerender);
+  unplaced.append(unplacedZone);
 
   const canvas = document.createElement("div");
   canvas.className = "schema-editor-detail-canvas";
@@ -181,7 +182,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
   btnRow.append(addCont, addFiles);
   canvas.append(btnRow);
 
-  layoutWrap.append(pool, canvas);
+  layoutWrap.append(unplaced, canvas);
   parent.append(layoutWrap);
 }
 
@@ -256,9 +257,9 @@ function renderContainer(
   zone.className = "layout-dropzone layout-dropzone--compact";
   zone.dataset.containerId = container.id;
   for (const key of container.fieldKeys) {
-    if (draft.fields.some((f) => f.key === key)) {
-      zone.append(renderFieldRow(key, container, draft, rerender));
-    }
+    if (!draft.fields.some((f) => f.key === key)) continue;
+    if (!isDetailFieldVisibleInSchema(draft, key)) continue;
+    zone.append(renderFieldRow(key, container, draft, rerender));
   }
   enableDrop(zone, draft, rerender);
   box.append(zone);

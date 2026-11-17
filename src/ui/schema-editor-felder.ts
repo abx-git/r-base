@@ -1,4 +1,5 @@
-import { ensureUnplacedCatalogFieldsInLayout, syncTableColumnsWithFieldCatalog } from "../lib/field-placement-editor";
+import { syncTableColumnsWithFieldCatalog } from "../lib/field-placement-editor";
+import { persistSchemaDefinition } from "../lib/schema-editor-persist";
 import type { DatasetSchemaDefinition, FieldDataType } from "../lib/dataset-schema-types";
 import {
   fieldTypes,
@@ -13,10 +14,22 @@ export type FelderRenderContext = {
   draft: DatasetSchemaDefinition;
   setStatus: (msg: string) => void;
   rerender: () => void;
+  onSchemaPersisted?: (saved: DatasetSchemaDefinition) => void;
 };
 
 export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext): void {
-  const { draft, setStatus, rerender } = ctx;
+  const { draft, setStatus, rerender, onSchemaPersisted } = ctx;
+
+  const persistFeldkatalog = () => {
+    const err = persistSchemaDefinition(draft);
+    if (err) {
+      setStatus(err);
+      return false;
+    }
+    onSchemaPersisted?.(structuredClone(draft));
+    setStatus("");
+    return true;
+  };
   parent.replaceChildren();
 
   parent.append(
@@ -66,10 +79,9 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
       dataType: "string",
     });
     syncTableColumnsWithFieldCatalog(draft);
-    ensureUnplacedCatalogFieldsInLayout(draft);
     keyIn.value = "";
     labelIn.value = "";
-    setStatus("");
+    if (!persistFeldkatalog()) return;
     paint();
   });
   addRow.append(keyIn, labelIn, addBtn);
@@ -112,7 +124,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
           draft.fields = draft.fields.filter((f) => f.key !== field.key);
           purgeFieldFromLayout(draft, field.key);
           purgeFieldFromTable(draft, field.key);
-          setStatus("");
+          if (!persistFeldkatalog()) return;
           rerender();
         });
         keyWrap.append(rem);

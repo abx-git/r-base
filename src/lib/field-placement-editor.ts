@@ -1,6 +1,16 @@
 import type { DatasetSchemaDefinition, LayoutContainer, LayoutRow, TableColumnDef } from "./dataset-schema-types";
 import { dedupeLayoutFieldKeys } from "./schema-compat";
+import { isDetailFieldVisibleInSchema } from "./detail-field-visibility";
 import { FILES_LAYOUT_CONTAINER_ID, isFilesLayoutContainer } from "./detail-layout";
+
+function pruneInvisibleDetailFieldsFromLayout(draft: DatasetSchemaDefinition): void {
+  for (const row of draft.layout) {
+    for (const c of row.containers ?? []) {
+      if (isFilesLayoutContainer(c)) continue;
+      c.fieldKeys = (c.fieldKeys ?? []).filter((k) => isDetailFieldVisibleInSchema(draft, k));
+    }
+  }
+}
 import {
   INDEX_TABLE_FIELDS,
   getHiddenTableColumnIdSet,
@@ -47,22 +57,13 @@ function findMetaContainer(row: LayoutRow): LayoutContainer {
 export function prepareSchemaEditorDraft(draft: DatasetSchemaDefinition): void {
   syncTableColumnsWithFieldCatalog(draft);
   dedupeLayoutFieldKeys(draft);
+  pruneInvisibleDetailFieldsFromLayout(draft);
   ensureUnplacedCatalogFieldsInLayout(draft);
 }
 
-/** Neue Feldkatalog-Einträge ohne Layout → container-meta (ohne Duplikate). */
-export function ensureUnplacedCatalogFieldsInLayout(draft: DatasetSchemaDefinition): void {
-  const row = ensureDetailLayoutRow(draft);
-  const meta = findMetaContainer(row);
-  const placed = new Set<string>();
-  for (const c of row.containers) {
-    if (isFilesLayoutContainer(c)) continue;
-    for (const k of c.fieldKeys ?? []) placed.add(k);
-  }
-  for (const f of draft.fields) {
-    if (placed.has(f.key)) continue;
-    if (!meta.fieldKeys.includes(f.key)) meta.fieldKeys.push(f.key);
-  }
+/** Platzhalter — Platzierung nur über „Anordnung“ (Container / „Nicht platziert“). */
+export function ensureUnplacedCatalogFieldsInLayout(_draft: DatasetSchemaDefinition): void {
+  /* no-op */
 }
 
 /** Alle Feldkatalog-Felder in tableColumns, fehlende ans Ende. */
@@ -146,10 +147,17 @@ export function unassignedDetailFieldKeys(draft: DatasetSchemaDefinition): strin
   return draft.fields.map((f) => f.key).filter((k) => !placed.has(k));
 }
 
-/** Nur Felder, die in einem Container liegen (entspricht der Liste oberhalb). */
+/** Platzierte Felder, die im Detail sichtbar sind (Bereich „Anordnung“). */
 export function getPlacedDetailFieldOrder(draft: DatasetSchemaDefinition): string[] {
   const skip = new Set(unassignedDetailFieldKeys(draft));
-  return getDetailFieldOrder(draft).filter((k) => !skip.has(k));
+  return getDetailFieldOrder(draft).filter(
+    (k) => !skip.has(k) && isDetailFieldVisibleInSchema(draft, k),
+  );
+}
+
+/** Sichtbar, aber noch keinem Container zugeordnet. */
+export function getVisibleUnassignedDetailFieldKeys(draft: DatasetSchemaDefinition): string[] {
+  return unassignedDetailFieldKeys(draft).filter((k) => isDetailFieldVisibleInSchema(draft, k));
 }
 
 export function detailFieldPlacementLabel(draft: DatasetSchemaDefinition, fieldKey: string): string {

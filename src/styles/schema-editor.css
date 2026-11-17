@@ -318,40 +318,11 @@
     gap: 0.45rem;
   }
 
-  .schema-editor-placement-panel--detail .schema-editor-liste-header,
-  .schema-editor-placement-panel--detail .schema-editor-liste-row--detail-placed {
-    grid-template-columns:
-      3.6rem minmax(5rem, 1fr) minmax(5rem, 0.85fr) minmax(4.5rem, 1fr) 3.5rem 5rem;
-  }
 }
 
 .schema-editor-placement-container {
   font-size: 0.78rem;
   color: var(--muted, #666);
-}
-
-.schema-editor-pool-out {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.schema-editor-pool-visibility {
-  margin-top: 0.65rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.schema-editor-pool-visibility strong {
-  font-size: 0.8rem;
-}
-
-.schema-editor-pool-visibility .schema-editor-hint {
-  margin: 0 0 0.35rem;
-  font-size: 0.74rem;
 }
 
 .schema-editor-liste-row .field {
@@ -436,7 +407,7 @@
     align-items: flex-start;
   }
 
-  .schema-editor-layout-pool {
+  .schema-editor-unplaced {
     position: sticky;
     top: 0;
     width: min(220px, 32%);
