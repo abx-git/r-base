@@ -128,6 +128,16 @@ export function purgeFieldFromLayout(draft: DatasetSchemaDefinition, key: string
 
 export function purgeFieldFromTable(draft: DatasetSchemaDefinition, key: string): void {
   draft.tableColumns = draft.tableColumns.filter((c) => c.fieldKey !== key);
+  const hidden = new Set(draft.hiddenTableColumnKeys ?? []);
+  hidden.delete(key);
+  hidden.delete(`meta:${key}`);
+  hidden.delete(`index:${key}`);
+  if (hidden.size) draft.hiddenTableColumnKeys = [...hidden];
+  else delete draft.hiddenTableColumnKeys;
+  if (draft.defaultHiddenDetailFieldKeys?.length) {
+    draft.defaultHiddenDetailFieldKeys = draft.defaultHiddenDetailFieldKeys.filter((k) => k !== key);
+    if (!draft.defaultHiddenDetailFieldKeys.length) delete draft.defaultHiddenDetailFieldKeys;
+  }
 }
 
 export function removeFieldFromAllContainers(draft: DatasetSchemaDefinition, key: string): void {

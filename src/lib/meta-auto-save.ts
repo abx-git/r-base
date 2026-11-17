@@ -1,20 +1,27 @@
 import { appState, patchPersistStatus } from "../state";
 
-export type MetaSaveFlush = (fieldKey: string, value: unknown) => Promise<void>;
+export type MetaSaveFlush = (locId: string, fieldKey: string, value: unknown) => Promise<void>;
 
 const DEBOUNCE_MS = 650;
+
+type PendingEntry = { locId: string; fieldKey: string; value: unknown };
+
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
-const pendingValues = new Map<string, unknown>();
+const pendingValues = new Map<string, PendingEntry>();
 
 let flushImpl: MetaSaveFlush | null = null;
+
+function pendingKey(locId: string, fieldKey: string): string {
+  return `${locId}\0${fieldKey}`;
+}
 
 export function bindMetaAutoSave(flush: MetaSaveFlush): void {
   flushImpl = flush;
 }
 
-/** Noch nicht auf Platte — Anzeige im Formular bis zum Flush. */
-export function getDraftFieldValue(fieldKey: string): unknown | undefined {
-  return pendingValues.get(fieldKey);
+export function getDraftFieldValue(fieldKey: string, locId = appState.selectedLocId): unknown | undefined {
+  if (!locId) return undefined;
+  return pendingValues.get(pendingKey(locId, fieldKey))?.value;
 }
 
 export function markPersistDirty(): void {
@@ -22,36 +29,53 @@ export function markPersistDirty(): void {
   patchPersistStatus("dirty");
 }
 
-export function queueMetaFieldSave(fieldKey: string, value: unknown): void {
-  pendingValues.set(fieldKey, value);
+export function queueMetaFieldSave(fieldKey: string, value: unknown, locId = appState.selectedLocId): void {
+  if (!locId) return;
+  const key = pendingKey(locId, fieldKey);
+  pendingValues.set(key, { locId, fieldKey, value });
   markPersistDirty();
-  const prev = timers.get(fieldKey);
+  const prev = timers.get(key);
   if (prev !== undefined) clearTimeout(prev);
   timers.set(
-    fieldKey,
+    key,
     setTimeout(() => {
-      void flushMetaField(fieldKey);
+      void flushPendingKey(key);
     }, DEBOUNCE_MS),
   );
 }
 
-export async function commitMetaFieldSave(fieldKey: string, value: unknown): Promise<void> {
-  const prev = timers.get(fieldKey);
+export async function commitMetaFieldSave(
+  fieldKey: string,
+  value: unknown,
+  locId = appState.selectedLocId,
+): Promise<void> {
+  if (!locId) return;
+  const key = pendingKey(locId, fieldKey);
+  const prev = timers.get(key);
   if (prev !== undefined) clearTimeout(prev);
-  timers.delete(fieldKey);
-  pendingValues.set(fieldKey, value);
-  await flushMetaField(fieldKey);
+  timers.delete(key);
+  pendingValues.set(key, { locId, fieldKey, value });
+  await flushPendingKey(key);
 }
 
-async function flushMetaField(fieldKey: string): Promise<void> {
-  timers.delete(fieldKey);
-  if (!flushImpl) return;
-  const value = pendingValues.get(fieldKey);
-  if (value === undefined) return;
+/** Vor Datensatz-Wechsel: offene Entwürfe auf Platte. */
+export async function flushAllPendingMetaSaves(): Promise<void> {
+  const keys = [...timers.keys()];
+  for (const key of keys) {
+    timers.delete(key);
+    await flushPendingKey(key);
+  }
+}
+
+async function flushPendingKey(key: string): Promise<void> {
+  const entry = pendingValues.get(key);
+  if (!entry || !flushImpl) return;
+  const { locId, fieldKey, value } = entry;
   patchPersistStatus("saving");
   try {
-    await flushImpl(fieldKey, value);
-    if (pendingValues.get(fieldKey) === value) pendingValues.delete(fieldKey);
+    await flushImpl(locId, fieldKey, value);
+    const latest = pendingValues.get(key);
+    if (latest && latest.value === value) pendingValues.delete(key);
     patchPersistStatus("saved");
   } catch (e) {
     patchPersistStatus("dirty");

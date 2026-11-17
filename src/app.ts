@@ -1,5 +1,6 @@
+import { findScanByLocId, locIdsReferToSameRecord } from "./lib/dataset-scan-match";
 import { bindMetaAutoSave, commitMetaFieldSave, queueMetaFieldSave } from "./lib/meta-auto-save";
-import { appState, getSelectedScan, patchState, withPersistStatus } from "./state";
+import { appState, forceAppRerender, getSelectedScan, patchState, withPersistStatus } from "./state";
 import { mountShell, setPreviewContent } from "./ui/shell";
 import { openSettingsModal } from "./ui/settings-modal";
 import {
@@ -100,17 +101,24 @@ async function connectFolder(): Promise<void> {
 
 async function refreshIndexAfterMetaWrite(scan: DatasetScan): Promise<void> {
   const record = recordFromScan(scan, syncStatusAfterLocalEdit());
-  const records = appState.records.map((r) => (r.locId === record.locId ? record : r));
+  const records = appState.records.map((r) =>
+    locIdsReferToSameRecord(r.locId, record.locId) ? record : r,
+  );
   await rebuildIndex(records);
-  const pendingCount = pendingLocalChanges(appState.scans);
-  patchState({
-    records,
-    globalSync: { ...appState.globalSync, pendingCount },
-  });
+  const globalSync = { ...appState.globalSync, pendingCount: pendingLocalChanges(appState.scans) };
+  appState.records = records;
+  appState.globalSync = globalSync;
+  const editingThisDetail =
+    appState.view === "detail" &&
+    appState.selectedLocId &&
+    locIdsReferToSameRecord(appState.selectedLocId, scan.meta.locId);
+  if (!editingThisDetail) {
+    patchState({ records, globalSync });
+  }
 }
 
-async function persistMetaFieldValue(fieldKey: string, value: unknown): Promise<void> {
-  const scan = getSelectedScan();
+async function persistMetaFieldValue(locId: string, fieldKey: string, value: unknown): Promise<void> {
+  const scan = findScanByLocId(appState.scans, locId);
   if (!scan) return;
   setMetaFieldValue(scan.meta, fieldKey, value);
   scan.meta.lastModified = new Date().toISOString();
@@ -254,7 +262,7 @@ export function startApp(container: HTMLElement): void {
         onClose: () => patchState({}),
         onSchemaChanged: () => patchState({ message: "Schema-Konfiguration aktualisiert." }),
         onSetFieldHidden: handleSetFieldHidden,
-        onRerender: () => patchState({}),
+        onRerender: () => forceAppRerender(),
       });
     },
     onNewDataset: async () => {
@@ -473,6 +481,6 @@ export function startApp(container: HTMLElement): void {
         patchState({ error: e instanceof Error ? e.message : String(e) });
       }
     },
-    onRerender: () => patchState({}),
+    onRerender: () => forceAppRerender(),
   });
 }

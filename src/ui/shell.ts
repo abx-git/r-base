@@ -1,4 +1,4 @@
-import { getDraftFieldValue } from "../lib/meta-auto-save";
+import { flushAllPendingMetaSaves, getDraftFieldValue } from "../lib/meta-auto-save";
 import { appState, dismissBanners, getSelectedScan, patchState, subscribe, subscribePersistIndicator } from "../state";
 import type { IndexRecord } from "../lib/db-index";
 import { normalizeDatasetTags } from "../lib/dataset-tags";
@@ -101,10 +101,11 @@ function wireBezeichnungField(field: HTMLInputElement | HTMLTextAreaElement, han
   field.addEventListener("focus", () => {
     if (field.value === DEFAULT_BEZEICHNUNG_HINT) field.value = "";
   });
-  const read = () => field.value.trim();
-  field.addEventListener("input", () => handlers.onMetaFieldDraft("bezeichnung", read()));
+  const readDraft = () => field.value;
+  const readCommit = () => field.value.trim();
+  field.addEventListener("input", () => handlers.onMetaFieldDraft("bezeichnung", readDraft()));
   field.addEventListener("change", () => {
-    const v = read();
+    const v = readCommit();
     handlers.onMetaFieldCommit("bezeichnung", v);
     if (!v) {
       field.value = "";
@@ -531,9 +532,16 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     const isSelected = selection.has(row.locId);
     const tr = el("tr", isSelected ? "data-row data-row--selected" : "data-row");
     tr.addEventListener("click", () => {
-      const scan = findScanByLocId(appState.scans, row.locId);
-      patchState({ selectedLocId: scan?.meta.locId ?? row.locId, view: "detail" });
-      handlers.onRerender();
+      void (async () => {
+        try {
+          await flushAllPendingMetaSaves();
+        } catch {
+          /* */
+        }
+        const scan = findScanByLocId(appState.scans, row.locId);
+        patchState({ selectedLocId: scan?.meta.locId ?? row.locId, view: "detail" });
+        handlers.onRerender();
+      })();
     });
     const tdSel = el("td", "table-cell-select");
     const rowCheck = el("input");
@@ -634,7 +642,7 @@ function renderSchemaFieldInput(
   }
   const wrap = el("label");
   if (!options?.omitLabel) wrap.textContent = def.label;
-  const draftValue = getDraftFieldValue(def.key);
+  const draftValue = getDraftFieldValue(def.key, scan.meta.locId);
   const value = draftValue !== undefined ? draftValue : getMetaFieldValue(scan.meta, def.key);
   if (def.dataType === "text") {
     const area = el("textarea", "field area");
@@ -674,7 +682,7 @@ function renderSchemaFieldInput(
     wrap.append(sel);
   } else if (def.dataType === "tags") {
     const tags = normalizeDatasetTags(
-      getDraftFieldValue(def.key) ?? getMetaFieldValue(scan.meta, def.key),
+      getDraftFieldValue(def.key, scan.meta.locId) ?? getMetaFieldValue(scan.meta, def.key),
     );
     renderDatasetTagsField(parent, tags, (next) => {
       void handlers.onMetaFieldChange(def.key, next);
@@ -726,6 +734,7 @@ function renderSchemaDetailForm(
   const layout = schema.layout.length ? schema.layout : getDefaultSchema().layout;
   const form = appendSchemaFormChunk(main);
   const hiddenKeys = options?.hiddenFieldKeys ?? new Set<string>();
+  const renderedOnce = new Set<string>();
   let renderedFieldCount = 0;
   let filesRendered = false;
 
@@ -756,17 +765,20 @@ function renderSchemaDetailForm(
         title.textContent = container.title;
         box.append(title);
       }
-      const fieldKeys = container.fieldKeys ?? [];
-      const keys = fieldKeys.length
-        ? fieldKeys
-        : schema.fields.filter((f) => f.key !== "locId").map((f) => f.key);
+      const keys = container.fieldKeys ?? [];
+      if (!keys.length) continue;
+      let visibleInBox = 0;
       for (const key of keys) {
+        if (renderedOnce.has(key)) continue;
         const def = fieldDefByKey(schema.fields, key);
         if (!def) continue;
         if (hiddenKeys.has(key)) continue;
         renderSchemaFieldInput(box, def, scan, handlers);
+        renderedOnce.add(key);
         renderedFieldCount++;
+        visibleInBox++;
       }
+      if (visibleInBox === 0) continue;
       rowEl.append(box);
     }
     if (rowEl.childNodes.length) form.append(rowEl);
@@ -842,7 +854,7 @@ function renderObsoleteFieldsSection(
     if (text.length > 80 || text.includes("\n")) {
       const area = el("textarea", "field area obsolete-field-value");
       area.setAttribute("data-field-key", entry.key);
-      const draftObs = getDraftFieldValue(entry.key);
+      const draftObs = getDraftFieldValue(entry.key, scan.meta.locId);
       area.value =
         draftObs !== undefined ? String(draftObs) : text === "—" ? "" : text;
       const readArea = () => parseObsoleteFieldInput(area.value);
@@ -853,7 +865,7 @@ function renderObsoleteFieldsSection(
       const input = el("input", "field obsolete-field-value");
       input.type = "text";
       input.setAttribute("data-field-key", entry.key);
-      const draftObs = getDraftFieldValue(entry.key);
+      const draftObs = getDraftFieldValue(entry.key, scan.meta.locId);
       input.value =
         draftObs !== undefined ? String(draftObs) : text === "—" ? "" : text;
       const readIn = () => parseObsoleteFieldInput(input.value);
@@ -965,7 +977,12 @@ function filteredDetailRows(): IndexRecord[] {
   return filterRecordsAdvanced(appState.records, currentRecordFilter(), appState.scans);
 }
 
-function navigateFilteredDetail(delta: number): void {
+async function navigateFilteredDetail(delta: number): Promise<void> {
+  try {
+    await flushAllPendingMetaSaves();
+  } catch {
+    /* Fehler über persistStatus / Banner */
+  }
   const rows = filteredDetailRows();
   if (!rows.length) return;
   const selected = appState.selectedLocId;

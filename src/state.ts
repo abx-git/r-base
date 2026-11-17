@@ -123,6 +123,11 @@ export function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/** UI neu zeichnen, ohne State zu ändern (z. B. nach Schema speichern). */
+export function forceAppRerender(): void {
+  for (const l of listeners) l();
+}
+
 /** Speicher-Icon in der Kopfzeile — ohne komplette UI neu zu rendern. */
 export function subscribePersistIndicator(listener: PersistIndicatorListener): () => void {
   persistIndicatorListeners.add(listener);

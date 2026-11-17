@@ -3,8 +3,6 @@ import {
   getDetailFieldOrder,
   isTablePlacementProtected,
   moveDetailFieldOrder,
-  syncDetailLayoutWithFieldCatalog,
-  syncTableColumnsWithFieldCatalog,
   tableColumnAt,
   tablePlacementRows,
   type PlacementRow,
@@ -38,12 +36,6 @@ const VIS_LABEL: Record<PlacementListMode, string> = {
 export function renderFieldPlacementList(parent: HTMLElement, ctx: PlacementListContext): void {
   const draft = ctx.getDraft();
   const mode = ctx.mode;
-
-  if (mode === "liste") {
-    syncTableColumnsWithFieldCatalog(draft);
-  } else {
-    syncDetailLayoutWithFieldCatalog(draft);
-  }
 
   const header = document.createElement("div");
   header.className = "schema-editor-liste-header";

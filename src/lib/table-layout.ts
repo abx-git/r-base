@@ -98,7 +98,14 @@ export function applyTableColumnHidden(
   const next = structuredClone(schema);
   const set = new Set(next.hiddenTableColumnKeys ?? []);
   if (hidden) set.add(columnId);
-  else set.delete(columnId);
+  else {
+    set.delete(columnId);
+    const bare = columnId.includes(":") ? columnId.slice(columnId.indexOf(":") + 1) : columnId;
+    set.delete(bare);
+    const source = columnId.includes(":") ? columnId.split(":")[0] : "meta";
+    const alt = source === "meta" ? `index:${bare}` : `meta:${bare}`;
+    set.delete(alt);
+  }
   const keys = [...set];
   if (keys.length) next.hiddenTableColumnKeys = keys;
   else delete next.hiddenTableColumnKeys;

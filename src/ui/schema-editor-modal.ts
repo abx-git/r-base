@@ -1,3 +1,4 @@
+import { prepareSchemaEditorDraft } from "../lib/field-placement-editor";
 import { getSchemaById, upsertSchemaDefinition } from "../lib/dataset-schema-store";
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 import type { DatasetMeta } from "../lib/meta-schema";
@@ -40,6 +41,7 @@ export function openSchemaEditorModal(
 
   const original = structuredClone(existing);
   let draft = structuredClone(existing);
+  prepareSchemaEditorDraft(draft);
   let tab: SchemaEditorTabId = mapInitialTab(options?.initialTab, Boolean(options?.datasetContext));
 
   const shell = createSchemaEditorShell();
@@ -90,6 +92,7 @@ export function openSchemaEditorModal(
 
   shell.bindSave(() => {
     consolidateDetailLayout(draft);
+    prepareSchemaEditorDraft(draft);
     const err = validateDraft(draft);
     if (err) {
       shell.setStatus(err);

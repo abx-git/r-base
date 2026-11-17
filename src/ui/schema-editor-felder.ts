@@ -1,3 +1,4 @@
+import { ensureUnplacedCatalogFieldsInLayout, syncTableColumnsWithFieldCatalog } from "../lib/field-placement-editor";
 import type { DatasetSchemaDefinition, FieldDataType } from "../lib/dataset-schema-types";
 import {
   fieldTypes,
@@ -64,6 +65,8 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
       label: labelIn.value.trim() || key,
       dataType: "string",
     });
+    syncTableColumnsWithFieldCatalog(draft);
+    ensureUnplacedCatalogFieldsInLayout(draft);
     keyIn.value = "";
     labelIn.value = "";
     setStatus("");

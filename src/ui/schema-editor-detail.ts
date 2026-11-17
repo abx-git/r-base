@@ -103,7 +103,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
 
   parent.append(
     hint(
-      "Alle Felder aus dem Feldkatalog: Sichtbarkeit im Detaildialog und Reihenfolge. Darunter optional Spaltenbreite, Dateien-Block und Feintuning per Drag & Drop.",
+      "Sichtbarkeit und Reihenfolge (↕ tauscht Felder in ihren Containern). Darunter Container-Grid: Felder ziehen, Breite, Dateien — „Nicht platziert“ bleibt dauerhaft möglich.",
     ),
   );
 

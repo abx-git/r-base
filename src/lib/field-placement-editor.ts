@@ -1,4 +1,5 @@
-import type { DatasetSchemaDefinition, LayoutRow, TableColumnDef } from "./dataset-schema-types";
+import type { DatasetSchemaDefinition, LayoutContainer, LayoutRow, TableColumnDef } from "./dataset-schema-types";
+import { dedupeLayoutFieldKeys } from "./schema-compat";
 import { isFilesLayoutContainer } from "./detail-layout";
 import {
   INDEX_TABLE_FIELDS,
@@ -32,7 +33,39 @@ function ensureDetailLayoutRow(draft: DatasetSchemaDefinition): LayoutRow {
   return row;
 }
 
-/** Alle Feldkatalog-Felder in tableColumns, fehlende ans Ende. Reihenfolge = einheitliche Editor-Liste. */
+function findMetaContainer(row: LayoutRow): LayoutContainer {
+  let meta = row.containers.find((c) => c.id === "container-meta");
+  if (!meta) {
+    meta = { id: "container-meta", title: "", colSpan: 12, fieldKeys: [] };
+    row.containers.unshift(meta);
+  }
+  if (!meta.fieldKeys) meta.fieldKeys = [];
+  return meta;
+}
+
+/** Einmal beim Öffnen/Speichern des Schema-Editors — nicht bei jedem Tab-Render. */
+export function prepareSchemaEditorDraft(draft: DatasetSchemaDefinition): void {
+  syncTableColumnsWithFieldCatalog(draft);
+  dedupeLayoutFieldKeys(draft);
+  ensureUnplacedCatalogFieldsInLayout(draft);
+}
+
+/** Neue Feldkatalog-Einträge ohne Layout → container-meta (ohne Duplikate). */
+export function ensureUnplacedCatalogFieldsInLayout(draft: DatasetSchemaDefinition): void {
+  const row = ensureDetailLayoutRow(draft);
+  const meta = findMetaContainer(row);
+  const placed = new Set<string>();
+  for (const c of row.containers) {
+    if (isFilesLayoutContainer(c)) continue;
+    for (const k of c.fieldKeys ?? []) placed.add(k);
+  }
+  for (const f of draft.fields) {
+    if (placed.has(f.key)) continue;
+    if (!meta.fieldKeys.includes(f.key)) meta.fieldKeys.push(f.key);
+  }
+}
+
+/** Alle Feldkatalog-Felder in tableColumns, fehlende ans Ende. */
 export function syncTableColumnsWithFieldCatalog(draft: DatasetSchemaDefinition): void {
   const seen = new Set<string>();
   const nextCols: TableColumnDef[] = [];
@@ -69,7 +102,6 @@ export function tablePlacementRows(draft: DatasetSchemaDefinition): {
   rows: PlacementRow[];
   hidden: Set<string>;
 } {
-  syncTableColumnsWithFieldCatalog(draft);
   const hidden = getHiddenTableColumnIdSet(draft);
   const rows: PlacementRow[] = draft.tableColumns.map((col) => {
     if (col.source === "index") {
@@ -91,7 +123,6 @@ export function tablePlacementRows(draft: DatasetSchemaDefinition): {
 }
 
 export function tableColumnAt(draft: DatasetSchemaDefinition, rowIndex: number): TableColumnDef | undefined {
-  syncTableColumnsWithFieldCatalog(draft);
   return draft.tableColumns[rowIndex];
 }
 
@@ -104,23 +135,7 @@ export function isTablePlacementProtected(draft: DatasetSchemaDefinition, row: P
   });
 }
 
-/** Detail: Reihenfolge über alle nicht-Datei-Container + nicht platzierte Katalogfelder. */
-export function syncDetailLayoutWithFieldCatalog(draft: DatasetSchemaDefinition): void {
-  const row = ensureDetailLayoutRow(draft);
-  let meta = row.containers.find((c) => c.id === "container-meta");
-  if (!meta) {
-    meta = { id: "container-meta", title: "", colSpan: 12, fieldKeys: [] };
-    row.containers.unshift(meta);
-  }
-  if (!meta.fieldKeys) meta.fieldKeys = [];
-
-  const order = getDetailFieldOrder(draft);
-  for (const key of order) {
-    if (meta.fieldKeys.includes(key)) continue;
-    meta.fieldKeys.push(key);
-  }
-}
-
+/** Anzeige-Reihenfolge im Editor: Layout durchlaufen, danach Felder ohne Platzierung. */
 export function getDetailFieldOrder(draft: DatasetSchemaDefinition): string[] {
   const row = ensureDetailLayoutRow(draft);
   const seen = new Set<string>();
@@ -140,34 +155,44 @@ export function getDetailFieldOrder(draft: DatasetSchemaDefinition): string[] {
   return order;
 }
 
+function containerHoldingKey(draft: DatasetSchemaDefinition, fieldKey: string): LayoutContainer | null {
+  for (const c of ensureDetailLayoutRow(draft).containers) {
+    if (isFilesLayoutContainer(c)) continue;
+    if ((c.fieldKeys ?? []).includes(fieldKey)) return c;
+  }
+  return null;
+}
+
+/** Vertauscht zwei Felder in der Anzeige-Reihenfolge, ohne Container-Layout zu zerstören. */
 export function moveDetailFieldOrder(draft: DatasetSchemaDefinition, fieldKey: string, delta: number): void {
   const order = getDetailFieldOrder(draft);
   const idx = order.indexOf(fieldKey);
   if (idx < 0) return;
-  const next = idx + delta;
-  if (next < 0 || next >= order.length) return;
-  const tmp = order[idx]!;
-  order[idx] = order[next]!;
-  order[next] = tmp;
-  applyDetailFieldOrder(draft, order);
-}
+  const j = idx + delta;
+  if (j < 0 || j >= order.length) return;
+  const otherKey = order[j]!;
 
-function applyDetailFieldOrder(draft: DatasetSchemaDefinition, order: string[]): void {
   const row = ensureDetailLayoutRow(draft);
-  const meta = row.containers.find((c) => c.id === "container-meta");
-  for (const c of row.containers) {
-    if (isFilesLayoutContainer(c)) continue;
-    c.fieldKeys = (c.fieldKeys ?? []).filter((k) => !order.includes(k));
-  }
-  if (meta) {
-    const rest = (meta.fieldKeys ?? []).filter((k) => !order.includes(k));
-    meta.fieldKeys = [...order, ...rest];
+  const meta = findMetaContainer(row);
+
+  const ensureInContainer = (key: string): LayoutContainer => {
+    const hit = containerHoldingKey(draft, key);
+    if (hit) return hit;
+    meta.fieldKeys.push(key);
+    return meta;
+  };
+
+  const contA = ensureInContainer(fieldKey);
+  const contB = ensureInContainer(otherKey);
+  const ia = contA.fieldKeys.indexOf(fieldKey);
+  const ib = contB.fieldKeys.indexOf(otherKey);
+  if (ia < 0 || ib < 0) return;
+
+  if (contA === contB) {
+    contA.fieldKeys[ia] = otherKey;
+    contB.fieldKeys[ib] = fieldKey;
   } else {
-    row.containers.unshift({
-      id: "container-meta",
-      title: "",
-      colSpan: 12,
-      fieldKeys: [...order],
-    });
+    contA.fieldKeys[ia] = otherKey;
+    contB.fieldKeys[ib] = fieldKey;
   }
 }
