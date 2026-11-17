@@ -198,7 +198,8 @@
 @media (min-width: 720px) {
   .schema-editor-grid-row--felder.schema-editor-liste-header,
   .schema-editor-grid-row--felder.schema-editor-liste-row {
-    grid-template-columns: 3.6rem minmax(5rem, 1fr) minmax(5.5rem, 1fr) 5.5rem 4.5rem 2.25rem;
+    grid-template-columns:
+      3.6rem minmax(4.5rem, 1fr) minmax(5rem, 1fr) 4.5rem 3.75rem 5.5rem 2.25rem;
   }
 }
 

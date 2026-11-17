@@ -1,4 +1,5 @@
 import type { DatasetSchemaDefinition, FieldDataType } from "../lib/dataset-schema-types";
+import { isOptionalSchemaField } from "../lib/meta-hidden-fields";
 import {
   fieldTypes,
   hint,
@@ -7,6 +8,7 @@ import {
   purgeFieldFromLayout,
   purgeFieldFromTable,
   slugFieldKey,
+  toggleDraftDetailDefaultHidden,
   toggleSwitch,
 } from "./schema-editor-shared";
 
@@ -22,7 +24,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
 
   parent.append(
     hint(
-      "Metafelder für Datensätze: Reihenfolge, Bezeichnung, Typ und Pflicht. Systemfeld „locId“ ist gesperrt.",
+      "Was für Felder es gibt (Key, Typ, Pflicht). „In Detail“ = Standard in der Detailansicht für neue Datensätze und Import. Tabellen → Listenansicht. Anordnung → Detailformular.",
     ),
   );
 
@@ -38,7 +40,8 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
 
   const header = document.createElement("div");
   header.className = "schema-editor-liste-header schema-editor-grid-row--felder";
-  header.innerHTML = "<span></span><span>Label</span><span>Key</span><span>Typ</span><span>Pflicht</span><span></span>";
+  header.innerHTML =
+    "<span></span><span>Label</span><span>Key</span><span>Typ</span><span>Pflicht</span><span>In Detail</span><span></span>";
   parent.append(header);
 
   const list = document.createElement("div");
@@ -82,11 +85,15 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
     list.replaceChildren();
     const q = filter();
     const total = draft.fields.length;
+    const hiddenDefaults = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
     draft.fields.forEach((field, idx) => {
       if (q && !field.key.toLowerCase().includes(q) && !field.label.toLowerCase().includes(q)) return;
 
       const row = document.createElement("div");
       row.className = "schema-editor-liste-row schema-editor-grid-row--felder";
+      if (isOptionalSchemaField(field) && hiddenDefaults.has(field.key)) {
+        row.classList.add("schema-editor-liste-row--hidden");
+      }
 
       const moves = document.createElement("div");
       moves.className = "schema-editor-liste-moves";
@@ -151,6 +158,22 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
         );
       }
 
+      const detailCell = document.createElement("div");
+      if (!isOptionalSchemaField(field)) {
+        const tag = document.createElement("span");
+        tag.className = "schema-editor-badge";
+        tag.textContent = "immer";
+        detailCell.append(tag);
+      } else {
+        const visibleInDetail = !hiddenDefaults.has(field.key);
+        detailCell.append(
+          toggleSwitch(visibleInDetail, `${field.label} standardmäßig in Detail`, (visible) => {
+            toggleDraftDetailDefaultHidden(draft, field.key, !visible);
+            paint();
+          }),
+        );
+      }
+
       const actCell = document.createElement("div");
       actCell.className = "schema-editor-felder-act";
       if (!field.system) {
@@ -166,7 +189,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
         actCell.append(del);
       }
 
-      row.append(moves, labelCell, keyBadge, typeCell, reqCell, actCell);
+      row.append(moves, labelCell, keyBadge, typeCell, reqCell, detailCell, actCell);
       list.append(row);
     });
 

@@ -20,7 +20,6 @@ import {
   mkBtn,
   moveContainerInRow,
   moveFieldInContainer,
-  toggleDraftDetailDefaultHidden,
   toggleSwitch,
   unassignedFieldKeys,
 } from "./schema-editor-shared";
@@ -66,10 +65,12 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
     card.className = "schema-editor-card";
     const title = document.createElement("h3");
     title.className = "schema-editor-section-title";
-    title.textContent = "Nur dieser Datensatz";
+    title.textContent = "Ausnahme: dieser Datensatz";
     card.append(
       title,
-      hint("Sichtbarkeit nur für den geöffneten Datensatz (in meta.json)."),
+      hint(
+        "Überschreibt „In Detail“ aus dem Feldkatalog nur hier — wird in meta.json gespeichert. Schema-Standard bleibt unverändert.",
+      ),
     );
     const meta = datasetContext.getMeta();
     const hiddenDetail =
@@ -101,7 +102,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
 
   parent.append(
     hint(
-      "Container nebeneinander über die Breite (←/→ Reihenfolge). „Dateien“ ist ein eigener Container. Felder per Drag oder ↑/↓ sortieren.",
+      "Nur die Anordnung der Detailansicht: Container, Breite, Feldreihenfolge und Datei-Upload-Block. Welche Felder existieren und ihr Standard „In Detail“ → Tab Feldkatalog. Tabellen-Spalten → Listenansicht.",
     ),
   );
 
@@ -166,48 +167,6 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
 
   layoutWrap.append(pool, canvas);
   parent.append(layoutWrap);
-
-  const defaultsBlock = document.createElement("details");
-  defaultsBlock.className = "schema-editor-collapsible";
-  defaultsBlock.open = false;
-  const defaultsSummary = document.createElement("summary");
-  defaultsSummary.textContent = "Standard-Sichtbarkeit (neue Datensätze / Import)";
-  defaultsBlock.append(
-    defaultsSummary,
-    hint("Optionale Felder können für neue Datensätze standardmäßig ausgeblendet sein."),
-  );
-
-  const hiddenDefaults = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
-  const defaultsList = document.createElement("div");
-  defaultsList.className = "schema-editor-defaults-list";
-  for (const key of orderedSchemaFieldKeys(draft)) {
-    const def = fieldDefByKey(draft.fields, key);
-    if (!def) continue;
-    const toggleRow = document.createElement("div");
-    toggleRow.className = "schema-editor-toggle-row";
-    const label = document.createElement("span");
-    label.className = "schema-editor-toggle-label";
-    label.textContent = def.label;
-    if (!isOptionalSchemaField(def)) {
-      const badge = document.createElement("span");
-      badge.className = "schema-editor-badge";
-      badge.textContent = "immer sichtbar";
-      toggleRow.append(label, badge);
-    } else {
-      const isHidden = hiddenDefaults.has(def.key);
-      const fieldKey = def.key;
-      toggleRow.append(
-        label,
-        toggleSwitch(!isHidden, `${def.label} standardmäßig anzeigen`, (visible) => {
-          toggleDraftDetailDefaultHidden(draft, fieldKey, !visible);
-          rerender();
-        }),
-      );
-    }
-    defaultsList.append(toggleRow);
-  }
-  defaultsBlock.append(defaultsList);
-  parent.append(defaultsBlock);
 }
 
 function renderContainer(

@@ -20,7 +20,7 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
   parent.replaceChildren();
   parent.append(
     hint(
-      "Jedes Schema-Feld und Index-Werte (Dateien, Sync, Geändert) können als Tabellenspalte ein- oder ausgeblendet werden. ID und Bezeichnung bleiben in der Tabelle immer sichtbar, sobald die Spalte aktiv ist.",
+      "Nur die Datensatz-Tabelle: welche Spalten erscheinen („In Tabelle“). Felder selbst → Feldkatalog. Detail-Layout → Detailformular.",
     ),
   );
 

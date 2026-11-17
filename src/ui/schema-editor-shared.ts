@@ -24,9 +24,9 @@ export const SCHEMA_EDITOR_TABS: {
   description: string;
 }[] = [
   { id: "stammdaten", label: "Stammdaten", description: "Name, ID-Präfix, Version" },
-  { id: "felder", label: "Feldkatalog", description: "Alle Metafelder definieren" },
-  { id: "liste", label: "Listenansicht", description: "Tabellenspalten & Sichtbarkeit" },
-  { id: "detail", label: "Detailformular", description: "Anordnung & Standard-Sichtbarkeit" },
+  { id: "felder", label: "Feldkatalog", description: "Felder · Standard „In Detail“" },
+  { id: "liste", label: "Listenansicht", description: "Tabellen-Spalten · „In Tabelle“" },
+  { id: "detail", label: "Detailformular", description: "Layout (Container, Reihenfolge)" },
 ];
 
 export function mapInitialTab(
