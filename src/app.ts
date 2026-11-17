@@ -48,7 +48,7 @@ import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
 import { pickSchemaIdForImport } from "./lib/schema-import-ui";
 import { openSchemaHtmlExportModal } from "./ui/schema-html-export-modal";
 import { openSchemaPdfExportModal } from "./ui/schema-export-modal";
-import { filterScansByRecordFilter } from "./lib/record-filter";
+import { buildRecordFilter, filterScansByRecordFilter } from "./lib/record-filter";
 import {
   bindProjectRoot,
   getProjectUiSettings,
@@ -213,7 +213,11 @@ export function startApp(container: HTMLElement): void {
     },
     onExcelExport: () => {
       if (!appState.ready) return;
-      const filter = { query: appState.filterQuery, tagRules: appState.filterTagRules };
+      const filter = buildRecordFilter({
+        query: appState.filterQuery,
+        tagRules: appState.filterTagRules,
+        columnFilters: appState.tableColumnFilters,
+      });
       const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
       openSchemaExcelExportModal(scans, appState.records, filter, (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
@@ -221,7 +225,11 @@ export function startApp(container: HTMLElement): void {
     },
     onSchemaPdfExport: () => {
       if (!appState.ready) return;
-      const filter = { query: appState.filterQuery, tagRules: appState.filterTagRules };
+      const filter = buildRecordFilter({
+        query: appState.filterQuery,
+        tagRules: appState.filterTagRules,
+        columnFilters: appState.tableColumnFilters,
+      });
       const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
       openSchemaPdfExportModal(scans, filter, (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
@@ -232,7 +240,11 @@ export function startApp(container: HTMLElement): void {
         patchState({ error: "Zuerst Stammordner mit Schreibzugriff wählen.", message: "" });
         return;
       }
-      const filter = { query: appState.filterQuery, tagRules: appState.filterTagRules };
+      const filter = buildRecordFilter({
+        query: appState.filterQuery,
+        tagRules: appState.filterTagRules,
+        columnFilters: appState.tableColumnFilters,
+      });
       const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
       openSchemaHtmlExportModal(appState.rootHandle, scans, filter, (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });

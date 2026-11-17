@@ -237,6 +237,67 @@
   vertical-align: middle;
 }
 
+.data-table-th.has-col-filter .data-table-th-label {
+  color: var(--accent);
+}
+
+.table-filter-row th {
+  padding: 0.15rem 0.35rem;
+  border-bottom: 1px solid var(--line);
+  background: rgba(28, 27, 25, 0.02);
+  vertical-align: middle;
+  cursor: default;
+}
+
+.table-filter-th-select {
+  width: 2.1rem;
+}
+
+.table-col-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.table-col-filter-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.12rem 0.3rem !important;
+  font-size: 0.72rem !important;
+  line-height: 1.2;
+}
+
+.table-col-filter-input:disabled {
+  opacity: 0.45;
+}
+
+.table-col-filter-presence {
+  flex: 0 0 auto;
+  padding: 0 0.28rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.68rem;
+  line-height: 1;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--control);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.table-col-filter-presence--filled,
+.table-col-filter-presence--empty {
+  border-color: rgba(28, 100, 200, 0.45);
+  color: var(--accent);
+  background: rgba(28, 100, 200, 0.07);
+}
+
+.table-col-filter-presence:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
 .data-table--compact td {
   max-width: 14rem;
   overflow: hidden;

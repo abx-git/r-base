@@ -2,7 +2,12 @@ import { flushAllPendingMetaSaves, getDraftFieldValue } from "../lib/meta-auto-s
 import { appState, dismissBanners, getSelectedScan, patchState, subscribe, subscribePersistIndicator } from "../state";
 import type { IndexRecord } from "../lib/db-index";
 import { normalizeDatasetTags } from "../lib/dataset-tags";
-import { filterRecordsAdvanced, hasActiveRecordFilter, type RecordFilterState } from "../lib/record-filter";
+import {
+  buildRecordFilter,
+  filterRecordsAdvanced,
+  hasActiveRecordFilter,
+  type RecordFilterState,
+} from "../lib/record-filter";
 import { renderDatasetTagsField, renderSidebarTagFilter } from "./tag-cloud";
 import {
   DEFAULT_BEZEICHNUNG_HINT,
@@ -18,7 +23,7 @@ import {
   getDefaultSchemaId,
   getSchemaById,
 } from "../lib/dataset-schema-store";
-import type { DatasetSchemaDefinition, SchemaFieldDef } from "../lib/dataset-schema-types";
+import type { DatasetSchemaDefinition, SchemaFieldDef, TableColumnDef } from "../lib/dataset-schema-types";
 import {
   fieldDefByKey,
   formatFieldForInput,
@@ -26,6 +31,13 @@ import {
   serializeFieldInput,
 } from "../lib/meta-field-access";
 import { formatTableCell, nextTableSort, sortIndexRecords, tableTagsForRow } from "../lib/table-schema";
+import {
+  columnFilterKey,
+  emptyColumnFilter,
+  isColumnFilterActive,
+  nextColumnFilterPresence,
+  type TableColumnFilterPresence,
+} from "../lib/table-column-filter";
 import { formatObsoleteValue, listObsoleteFields } from "../lib/meta-obsolete-fields";
 import { hiddenDetailFieldKeysForSchema } from "../lib/detail-field-visibility";
 import { getProjectUiSettings } from "../lib/project-config";
@@ -46,13 +58,16 @@ type SidebarFocus = { name: string; start: number | null; end: number | null };
 
 function captureSidebarFocus(): SidebarFocus | null {
   const el = document.activeElement;
-  if (!(el instanceof HTMLInputElement) || !el.closest(".sidebar") || !el.name) return null;
+  if (!(el instanceof HTMLInputElement) || !el.name) return null;
+  if (!el.closest(".sidebar") && !el.closest(".table-col-filter")) return null;
   return { name: el.name, start: el.selectionStart, end: el.selectionEnd };
 }
 
 function restoreSidebarFocus(root: HTMLElement, saved: SidebarFocus | null): void {
   if (!saved) return;
-  const input = root.querySelector<HTMLInputElement>(`.sidebar input[name="${saved.name}"]`);
+  const input =
+    root.querySelector<HTMLInputElement>(`.sidebar input[name="${CSS.escape(saved.name)}"]`) ??
+    root.querySelector<HTMLInputElement>(`.table-col-filter input[name="${CSS.escape(saved.name)}"]`);
   if (!input) return;
   input.focus();
   try {
@@ -331,10 +346,71 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
 }
 
 function currentRecordFilter(): RecordFilterState {
-  return {
+  return buildRecordFilter({
     query: appState.filterQuery,
     tagRules: appState.filterTagRules,
-  };
+    columnFilters: appState.tableColumnFilters,
+  });
+}
+
+function patchColumnFilter(
+  key: string,
+  patch: Partial<{ text: string; presence: TableColumnFilterPresence }>,
+): void {
+  const prev = appState.tableColumnFilters[key] ?? emptyColumnFilter();
+  const next = { ...prev, ...patch };
+  patchState({
+    tableColumnFilters: { ...appState.tableColumnFilters, [key]: next },
+  });
+}
+
+function presenceButtonLabel(mode: TableColumnFilterPresence): string {
+  if (mode === "filled") return "≠∅";
+  if (mode === "empty") return "∅";
+  return "○";
+}
+
+function renderTableColumnFilterCell(th: HTMLElement, col: TableColumnDef): void {
+  const key = columnFilterKey(col);
+  const filter = appState.tableColumnFilters[key] ?? emptyColumnFilter();
+  const active = isColumnFilterActive(filter);
+
+  const wrap = el("div", "table-col-filter");
+  const input = el("input", "table-col-filter-input field");
+  input.type = "search";
+  input.name = `colFilter:${key}`;
+  input.autocomplete = "off";
+  input.placeholder = "Teiltext";
+  input.title = "Teilstring (* optional)";
+  input.value = filter.text;
+  input.disabled = filter.presence !== "any";
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("input", () => {
+    patchColumnFilter(key, { text: input.value });
+  });
+
+  const presenceBtn = el("button", `table-col-filter-presence table-col-filter-presence--${filter.presence}`);
+  presenceBtn.type = "button";
+  presenceBtn.textContent = presenceButtonLabel(filter.presence);
+  presenceBtn.title =
+    filter.presence === "any"
+      ? "Wert: beliebig — Klick: nur mit Inhalt"
+      : filter.presence === "filled"
+        ? "Nur mit Inhalt — Klick: nur leer"
+        : "Nur leer — Klick: Filter aus";
+  presenceBtn.setAttribute("aria-label", presenceBtn.title);
+  presenceBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const presence = nextColumnFilterPresence(filter.presence);
+    patchColumnFilter(key, {
+      presence,
+      text: presence === "any" ? filter.text : "",
+    });
+  });
+
+  wrap.append(input, presenceBtn);
+  th.append(wrap);
+  if (active) th.classList.add("has-col-filter");
 }
 
 function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
@@ -343,9 +419,9 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   search.type = "search";
   search.name = "filterQuery";
   search.autocomplete = "off";
-  search.placeholder = "Volltext *…* oder spalte:*…* (z. B. bezeichnung:*Jura*)";
+  search.placeholder = "Volltext in allen Feldern…";
   search.title =
-    "Ohne Spaltenname: alle Felder (ohne Tags), * als Platzhalter. Mit feld:muster nur diese Spalte (Key oder Label, z. B. kategorie:*Muster*).";
+    "Durchsucht alle Detailfelder (ohne Tags), * als Platzhalter. Spaltenfilter direkt unter den Tabellenköpfen.";
   search.value = appState.filterQuery;
   wirePlaceholderFocus(search);
   search.addEventListener("input", () => {
@@ -361,6 +437,7 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
     patchState({
       filterQuery: "",
       filterTagRules: [],
+      tableColumnFilters: {},
       tableSelection: [],
     });
   });
@@ -511,7 +588,10 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     const label = el("span", "data-table-th-label");
     label.textContent = col.label;
     th.append(label);
+    const filterKey = columnFilterKey(col);
+    const colFilterActive = isColumnFilterActive(appState.tableColumnFilters[filterKey]);
     const isSorted = sort?.fieldKey === col.fieldKey && sort?.source === col.source;
+    if (colFilterActive) th.classList.add("has-col-filter");
     if (isSorted) {
       th.classList.add("is-sorted");
       const mark = el("span", "data-table-sort");
@@ -528,7 +608,17 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
     });
     headRow.append(th);
   }
-  thead.append(headRow);
+
+  const filterRow = el("tr", "table-filter-row");
+  const thFilterSel = el("th", "table-filter-th table-filter-th-select");
+  filterRow.append(thFilterSel);
+  for (const col of columns) {
+    const th = el("th", "table-filter-th");
+    renderTableColumnFilterCell(th, col);
+    filterRow.append(th);
+  }
+
+  thead.append(headRow, filterRow);
 
   const tbody = el("tbody");
   for (const row of rows) {

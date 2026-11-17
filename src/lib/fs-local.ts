@@ -33,8 +33,9 @@ import {
 export { DELETED_DATASET_DIR };
 
 const IMPORTS_DIR = "_imports";
+const EXPORTS_DIR = "_exports";
 
-const SKIP_SCAN = new Set([META_FILENAME, ".DS_Store", DELETED_DATASET_DIR, IMPORTS_DIR]);
+const SKIP_SCAN = new Set([META_FILENAME, ".DS_Store", DELETED_DATASET_DIR, IMPORTS_DIR, EXPORTS_DIR]);
 
 export type DatasetScan = {
   locId: string;

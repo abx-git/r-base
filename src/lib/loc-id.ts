@@ -5,6 +5,7 @@
 import { DELETED_DATASET_DIR } from "./dataset-trash";
 
 const IMPORTS_DIR = "_imports";
+const EXPORTS_DIR = "_exports";
 import { listChildNames, readTextFromFolder } from "./workspace";
 import { META_FILENAME } from "./meta-schema";
 import { getLoxIdPrefix } from "./id-config";
@@ -68,7 +69,7 @@ async function collectTakenInParent(
 
 async function collectTakenIds(root: FileSystemDirectoryHandle): Promise<Set<string>> {
   const taken = new Set<string>();
-  await collectTakenInParent(root, taken, new Set([DELETED_DATASET_DIR, IMPORTS_DIR]));
+  await collectTakenInParent(root, taken, new Set([DELETED_DATASET_DIR, IMPORTS_DIR, EXPORTS_DIR]));
   try {
     const trash = await root.getDirectoryHandle(DELETED_DATASET_DIR);
     await collectTakenInParent(trash, taken, new Set());

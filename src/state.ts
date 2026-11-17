@@ -1,5 +1,6 @@
 import type { IndexRecord, GlobalSyncMeta } from "./lib/db-index";
 import type { TagFilterRule } from "./lib/dataset-tags";
+import type { TableColumnFiltersState } from "./lib/table-column-filter";
 import type { DatasetScan } from "./lib/fs-local";
 import { findScanByLocId } from "./lib/dataset-scan-match";
 import type { SyncLogLine, SyncProgress } from "./lib/webdav-sync";
@@ -24,6 +25,8 @@ export type AppState = {
   scans: DatasetScan[];
   filterQuery: string;
   filterTagRules: TagFilterRule[];
+  /** Spaltenfilter in der Listenansicht (Key: source:fieldKey). */
+  tableColumnFilters: TableColumnFiltersState;
   tableSort: TableSortState | null;
   /** Tabellenansicht: Spalten aus diesem Schema (null = Standardschema). */
   listViewSchemaId: string | null;
@@ -99,6 +102,7 @@ export const appState: AppState = {
   scans: [],
   filterQuery: "",
   filterTagRules: [],
+  tableColumnFilters: {},
   tableSort: { fieldKey: "bezeichnung", source: "meta", dir: "asc" },
   listViewSchemaId: null,
   tableSelection: [],

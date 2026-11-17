@@ -66,6 +66,17 @@ export function tableTagsForRow(col: TableColumnDef, record: IndexRecord, meta?:
   return tags.filter(Boolean);
 }
 
+/** Ob die Spalte in der Tabelle als belegt gilt (nicht „—“ / leer). */
+export function columnCellHasValue(
+  col: TableColumnDef,
+  record: IndexRecord,
+  meta?: DatasetMeta,
+): boolean {
+  if (col.fieldKey === "tags") return tableTagsForRow(col, record, meta).length > 0;
+  const text = formatTableCell(col, record, meta);
+  return text !== "—" && text.trim().length > 0;
+}
+
 function sortableRawValue(
   sort: TableSortState,
   record: IndexRecord,

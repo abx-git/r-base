@@ -4,11 +4,29 @@ import { matchesTagRules, type TagFilterRule } from "./dataset-tags";
 import { metaByLocId } from "./dataset-search";
 import { resolveSchemaForDataset } from "./dataset-schema-store";
 import { matchesRecordSearchQuery } from "./record-search";
+import {
+  hasActiveColumnFilters,
+  matchesTableColumnFilters,
+  type TableColumnFiltersState,
+} from "./table-column-filter";
 
 export type RecordFilterState = {
   query: string;
   tagRules: TagFilterRule[];
+  columnFilters: TableColumnFiltersState;
 };
+
+export function buildRecordFilter(parts: {
+  query: string;
+  tagRules: TagFilterRule[];
+  columnFilters?: TableColumnFiltersState;
+}): RecordFilterState {
+  return {
+    query: parts.query,
+    tagRules: parts.tagRules,
+    columnFilters: parts.columnFilters ?? {},
+  };
+}
 
 export function filterRecordsAdvanced(
   records: IndexRecord[],
@@ -20,16 +38,19 @@ export function filterRecordsAdvanced(
 
   return records.filter((r) => {
     if (!matchesTagRules(r.tags, filter.tagRules)) return false;
-    if (!q) return true;
 
     const meta = metaMap?.get(r.locId);
     const schema = meta ? resolveSchemaForDataset(meta) : undefined;
+
+    if (!matchesTableColumnFilters(r, meta, filter.columnFilters)) return false;
+
+    if (!q) return true;
     return matchesRecordSearchQuery(q, r, meta, schema);
   });
 }
 
 export function hasActiveRecordFilter(filter: RecordFilterState): boolean {
-  return Boolean(filter.query.trim() || filter.tagRules.length);
+  return Boolean(filter.query.trim() || filter.tagRules.length || hasActiveColumnFilters(filter.columnFilters));
 }
 
 /** Scans, deren Index-Zeile den aktuellen Listenfilter erfüllt. */
