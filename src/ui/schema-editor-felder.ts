@@ -1,10 +1,13 @@
 import type { DatasetSchemaDefinition, FieldDataType } from "../lib/dataset-schema-types";
 import {
   fieldTypes,
+  hint,
   mkBtn,
+  moveSchemaField,
   purgeFieldFromLayout,
   purgeFieldFromTable,
   slugFieldKey,
+  toggleSwitch,
 } from "./schema-editor-shared";
 
 export type FelderRenderContext = {
@@ -17,6 +20,12 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
   const { draft, setStatus, rerender } = ctx;
   parent.replaceChildren();
 
+  parent.append(
+    hint(
+      "Metafelder für Datensätze: Reihenfolge, Bezeichnung, Typ und Pflicht. Systemfeld „locId“ ist gesperrt.",
+    ),
+  );
+
   const toolbar = document.createElement("div");
   toolbar.className = "schema-editor-fields-toolbar";
   const search = document.createElement("input");
@@ -27,19 +36,17 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
   toolbar.append(search);
   parent.append(toolbar);
 
-  const scroll = document.createElement("div");
-  scroll.className = "schema-editor-fields-scroll";
-  const table = document.createElement("table");
-  table.className = "schema-mini-table";
-  const thead = document.createElement("thead");
-  thead.innerHTML = `<tr><th>Key</th><th>Label</th><th>Typ</th><th>Pflicht</th><th></th></tr>`;
-  const tbody = document.createElement("tbody");
-  table.append(thead, tbody);
-  scroll.append(table);
-  parent.append(scroll);
+  const header = document.createElement("div");
+  header.className = "schema-editor-liste-header schema-editor-grid-row--felder";
+  header.innerHTML = "<span></span><span>Label</span><span>Key</span><span>Typ</span><span>Pflicht</span><span></span>";
+  parent.append(header);
+
+  const list = document.createElement("div");
+  list.className = "schema-editor-liste-rows";
+  parent.append(list);
 
   const addRow = document.createElement("div");
-  addRow.className = "schema-add-row";
+  addRow.className = "schema-add-row schema-editor-felder-add";
   const keyIn = document.createElement("input");
   keyIn.className = "field";
   keyIn.placeholder = "feld_key";
@@ -64,7 +71,7 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
     keyIn.value = "";
     labelIn.value = "";
     setStatus("");
-    rerender();
+    paint();
   });
   addRow.append(keyIn, labelIn, addBtn);
   parent.append(addRow);
@@ -72,24 +79,47 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
   const filter = () => search.value.trim().toLowerCase();
 
   const paint = () => {
-    tbody.replaceChildren();
+    list.replaceChildren();
     const q = filter();
-    for (const field of draft.fields) {
-      if (q && !field.key.toLowerCase().includes(q) && !field.label.toLowerCase().includes(q)) continue;
-      const tr = document.createElement("tr");
-      const keyTd = document.createElement("td");
-      keyTd.textContent = field.key;
-      const labelTd = document.createElement("td");
-      const labelInput = document.createElement("input");
-      labelInput.className = "field";
-      labelInput.value = field.label;
-      labelInput.addEventListener("change", () => {
-        field.label = labelInput.value;
+    const total = draft.fields.length;
+    draft.fields.forEach((field, idx) => {
+      if (q && !field.key.toLowerCase().includes(q) && !field.label.toLowerCase().includes(q)) return;
+
+      const row = document.createElement("div");
+      row.className = "schema-editor-liste-row schema-editor-grid-row--felder";
+
+      const moves = document.createElement("div");
+      moves.className = "schema-editor-liste-moves";
+      moves.append(
+        mkBtn("↑", idx === 0, () => {
+          moveSchemaField(draft, idx, -1);
+          rerender();
+        }),
+        mkBtn("↓", idx === total - 1, () => {
+          moveSchemaField(draft, idx, 1);
+          rerender();
+        }),
+      );
+
+      const labelCell = document.createElement("input");
+      labelCell.className = "field";
+      labelCell.value = field.label;
+      labelCell.setAttribute("aria-label", "Feldbezeichnung");
+      labelCell.addEventListener("change", () => {
+        field.label = labelCell.value;
       });
-      labelTd.append(labelInput);
-      const typeTd = document.createElement("td");
+
+      const keyBadge = document.createElement("span");
+      keyBadge.className = "schema-editor-liste-key";
+      keyBadge.textContent = field.key;
+      keyBadge.title = field.system ? "Systemfeld (Key nicht änderbar)" : "Key wird beim Anlegen festgelegt";
+
+      const typeCell = document.createElement("div");
       if (field.system && field.dataType === "locId") {
-        typeTd.textContent = "ID";
+        const tag = document.createElement("span");
+        tag.className = "schema-editor-badge";
+        tag.textContent = "ID";
+        typeCell.append(tag);
       } else {
         const sel = document.createElement("select");
         sel.className = "field";
@@ -103,30 +133,45 @@ export function renderFeldkatalog(parent: HTMLElement, ctx: FelderRenderContext)
         sel.addEventListener("change", () => {
           field.dataType = sel.value as FieldDataType;
         });
-        typeTd.append(sel);
+        typeCell.append(sel);
       }
-      const reqTd = document.createElement("td");
-      const req = document.createElement("input");
-      req.type = "checkbox";
-      req.checked = Boolean(field.constraints?.required);
-      req.disabled = Boolean(field.system && field.key === "locId");
-      req.addEventListener("change", () => {
-        field.constraints = { ...field.constraints, required: req.checked };
-      });
-      reqTd.append(req);
-      const actTd = document.createElement("td");
+
+      const reqCell = document.createElement("div");
+      const isLocId = field.system && field.key === "locId";
+      if (isLocId) {
+        const tag = document.createElement("span");
+        tag.className = "schema-editor-badge";
+        tag.textContent = "Pflicht";
+        reqCell.append(tag);
+      } else {
+        reqCell.append(
+          toggleSwitch(Boolean(field.constraints?.required), `${field.label} Pflichtfeld`, (on) => {
+            field.constraints = { ...field.constraints, required: on };
+          }),
+        );
+      }
+
+      const actCell = document.createElement("div");
+      actCell.className = "schema-editor-felder-act";
       if (!field.system) {
-        const del = mkBtn("Entfernen", false, () => {
+        const del = mkBtn("×", false, () => {
           draft.fields = draft.fields.filter((f) => f.key !== field.key);
           purgeFieldFromLayout(draft, field.key);
           purgeFieldFromTable(draft, field.key);
+          setStatus("");
           rerender();
         });
-        del.classList.add("btn-danger");
-        actTd.append(del);
+        del.classList.add("schema-editor-container-remove");
+        del.title = "Feld aus Schema entfernen";
+        actCell.append(del);
       }
-      tr.append(keyTd, labelTd, typeTd, reqTd, actTd);
-      tbody.append(tr);
+
+      row.append(moves, labelCell, keyBadge, typeCell, reqCell, actCell);
+      list.append(row);
+    });
+
+    if (!list.childNodes.length) {
+      list.append(hint(q ? "Keine Treffer für die Suche." : "Noch keine Felder."));
     }
   };
 

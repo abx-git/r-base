@@ -104,6 +104,15 @@ export function columnKeyOptions(draft: DatasetSchemaDefinition): { key: string;
   return [...meta, ...index];
 }
 
+export function moveSchemaField(draft: DatasetSchemaDefinition, idx: number, delta: number): void {
+  const next = idx + delta;
+  if (next < 0 || next >= draft.fields.length) return;
+  const fields = draft.fields;
+  const tmp = fields[idx]!;
+  fields[idx] = fields[next]!;
+  fields[next] = tmp;
+}
+
 export function moveTableCol(draft: DatasetSchemaDefinition, idx: number, delta: number): void {
   const next = idx + delta;
   if (next < 0 || next >= draft.tableColumns.length) return;
