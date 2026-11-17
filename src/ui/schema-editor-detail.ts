@@ -23,7 +23,7 @@ import {
   toggleSwitch,
   unassignedFieldKeys,
 } from "./schema-editor-shared";
-import { renderFieldPlacementList } from "./schema-editor-placement";
+import { renderFieldPlacementList, renderUnassignedDetailFields } from "./schema-editor-placement";
 
 export type DetailRenderContext = {
   draft: DatasetSchemaDefinition;
@@ -103,7 +103,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
 
   parent.append(
     hint(
-      "Sichtbarkeit und Reihenfolge (↕ tauscht Felder in ihren Containern). Darunter Container-Grid: Felder ziehen, Breite, Dateien — „Nicht platziert“ bleibt dauerhaft möglich.",
+      "Oben: platzierte Felder (Sichtbarkeit & Reihenfolge, „→ Pool“ löst die Zuordnung). Unten: Pool und Container — per Drag & Drop einordnen.",
     ),
   );
 
@@ -137,6 +137,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
   }
   enableDrop(poolZone, draft, rerender);
   pool.append(poolZone);
+  renderUnassignedDetailFields(pool, draft, rerender);
 
   const canvas = document.createElement("div");
   canvas.className = "schema-editor-detail-canvas";

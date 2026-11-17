@@ -1,6 +1,6 @@
 import type { DatasetSchemaDefinition, LayoutContainer, LayoutRow, TableColumnDef } from "./dataset-schema-types";
 import { dedupeLayoutFieldKeys } from "./schema-compat";
-import { isFilesLayoutContainer } from "./detail-layout";
+import { FILES_LAYOUT_CONTAINER_ID, isFilesLayoutContainer } from "./detail-layout";
 import {
   INDEX_TABLE_FIELDS,
   getHiddenTableColumnIdSet,
@@ -135,6 +135,34 @@ export function isTablePlacementProtected(draft: DatasetSchemaDefinition, row: P
   });
 }
 
+export function unassignedDetailFieldKeys(draft: DatasetSchemaDefinition): string[] {
+  const placed = new Set<string>();
+  for (const row of draft.layout) {
+    for (const c of row.containers ?? []) {
+      if (isFilesLayoutContainer(c)) continue;
+      for (const k of c.fieldKeys ?? []) placed.add(k);
+    }
+  }
+  return draft.fields.map((f) => f.key).filter((k) => !placed.has(k));
+}
+
+/** Nur Felder, die in einem Container liegen (entspricht der Liste oberhalb). */
+export function getPlacedDetailFieldOrder(draft: DatasetSchemaDefinition): string[] {
+  const skip = new Set(unassignedDetailFieldKeys(draft));
+  return getDetailFieldOrder(draft).filter((k) => !skip.has(k));
+}
+
+export function detailFieldPlacementLabel(draft: DatasetSchemaDefinition, fieldKey: string): string {
+  for (const c of ensureDetailLayoutRow(draft).containers) {
+    if (isFilesLayoutContainer(c)) continue;
+    if (!(c.fieldKeys ?? []).includes(fieldKey)) continue;
+    if (c.id === "container-meta") return c.title?.trim() || "Metadaten";
+    if (c.id === FILES_LAYOUT_CONTAINER_ID) continue;
+    return c.title?.trim() || c.id;
+  }
+  return "— nicht platziert";
+}
+
 /** Anzeige-Reihenfolge im Editor: Layout durchlaufen, danach Felder ohne Platzierung. */
 export function getDetailFieldOrder(draft: DatasetSchemaDefinition): string[] {
   const row = ensureDetailLayoutRow(draft);
@@ -165,25 +193,16 @@ function containerHoldingKey(draft: DatasetSchemaDefinition, fieldKey: string): 
 
 /** Vertauscht zwei Felder in der Anzeige-Reihenfolge, ohne Container-Layout zu zerstören. */
 export function moveDetailFieldOrder(draft: DatasetSchemaDefinition, fieldKey: string, delta: number): void {
-  const order = getDetailFieldOrder(draft);
+  const order = getPlacedDetailFieldOrder(draft);
   const idx = order.indexOf(fieldKey);
   if (idx < 0) return;
   const j = idx + delta;
   if (j < 0 || j >= order.length) return;
   const otherKey = order[j]!;
 
-  const row = ensureDetailLayoutRow(draft);
-  const meta = findMetaContainer(row);
-
-  const ensureInContainer = (key: string): LayoutContainer => {
-    const hit = containerHoldingKey(draft, key);
-    if (hit) return hit;
-    meta.fieldKeys.push(key);
-    return meta;
-  };
-
-  const contA = ensureInContainer(fieldKey);
-  const contB = ensureInContainer(otherKey);
+  const contA = containerHoldingKey(draft, fieldKey);
+  const contB = containerHoldingKey(draft, otherKey);
+  if (!contA || !contB) return;
   const ia = contA.fieldKeys.indexOf(fieldKey);
   const ib = contB.fieldKeys.indexOf(otherKey);
   if (ia < 0 || ib < 0) return;
