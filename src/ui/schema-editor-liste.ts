@@ -19,12 +19,14 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
   const draft = ctx.getDraft();
   parent.replaceChildren();
   parent.append(
-    hint("Spalten der Datensatz-Tabelle: Reihenfolge, Beschriftung und ob die Spalte sichtbar ist."),
+    hint(
+      "Konfigurierte Tabellenspalten: Reihenfolge und Beschriftung. Schalter „Sichtbar“ aus = Spalte fehlt in der Datensatz-Liste (bleibt hier konfiguriert).",
+    ),
   );
 
   const header = document.createElement("div");
   header.className = "schema-editor-liste-header";
-  header.innerHTML = "<span></span><span>Label</span><span>Feld</span><span>Sichtbar</span><span></span>";
+  header.innerHTML = "<span></span><span>Label</span><span>Feld</span><span>In Tabelle</span>";
   parent.append(header);
 
   const list = document.createElement("div");
@@ -107,18 +109,9 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
       );
     }
 
-    const del = mkBtn("×", false, () => {
-      const d = ctx.getDraft();
-      d.tableColumns.splice(idx, 1);
-      const hid = new Set(d.hiddenTableColumnKeys ?? []);
-      hid.delete(colId);
-      if (hid.size) d.hiddenTableColumnKeys = [...hid];
-      else delete d.hiddenTableColumnKeys;
-      ctx.rerender();
-    });
-    del.title = "Spalte entfernen";
+    if (hidden) row.classList.add("schema-editor-liste-row--hidden");
 
-    row.append(moves, labelIn, keySel, visCell, del);
+    row.append(moves, labelIn, keySel, visCell);
     list.append(row);
   });
 
