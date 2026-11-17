@@ -130,6 +130,27 @@ export function listTableColumnLayout(schema: DatasetSchemaDefinition): {
   return { configured, available };
 }
 
+/** Spalte in Tabelle sichtbar (legt Spalte ggf. an) oder ausgeblendet. */
+export function setTableColumnVisible(
+  schema: DatasetSchemaDefinition,
+  candidate: TableColumnCandidate,
+  visible: boolean,
+): DatasetSchemaDefinition {
+  const col: TableColumnDef = {
+    fieldKey: candidate.fieldKey,
+    label: candidate.label,
+    source: candidate.source,
+  };
+  const id = tableColumnId(col);
+  const exists = schema.tableColumns.some((c) => tableColumnId(c) === id);
+  if (visible) {
+    const base = exists ? structuredClone(schema) : addTableColumnToSchema(schema, candidate);
+    return applyTableColumnHidden(base, id, false);
+  }
+  if (!exists) return schema;
+  return applyTableColumnHidden(structuredClone(schema), id, true);
+}
+
 export function addTableColumnToSchema(
   schema: DatasetSchemaDefinition,
   candidate: TableColumnCandidate,

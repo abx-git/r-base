@@ -230,6 +230,41 @@
   color: var(--muted, #666);
 }
 
+.schema-editor-liste-row--available {
+  opacity: 0.88;
+}
+
+.schema-editor-liste-key {
+  font-size: 0.78rem;
+  color: var(--muted, #666);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schema-editor-liste-moves--idle {
+  justify-content: center;
+}
+
+.schema-editor-liste-idle {
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+}
+
+.schema-editor-liste-row--available .schema-editor-toggle-label {
+  font-size: 0.86rem;
+  padding: 0.35rem 0;
+}
+
+.schema-editor-liste-vis-protected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
 @media (min-width: 720px) {
   .schema-editor-liste-row {
     grid-template-columns: 3.6rem minmax(5rem, 1fr) minmax(7rem, 1.35fr) 5.5rem;

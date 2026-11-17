@@ -1,9 +1,9 @@
-import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
+import type { DatasetSchemaDefinition, TableColumnDef } from "../lib/dataset-schema-types";
 import {
-  addTableColumnToSchema,
   applyTableColumnHidden,
   isProtectedTableColumn,
   listTableColumnLayout,
+  setTableColumnVisible,
   tableColumnId,
   type TableColumnCandidate,
 } from "../lib/table-layout";
@@ -20,7 +20,7 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
   parent.replaceChildren();
   parent.append(
     hint(
-      "Konfigurierte Tabellenspalten: Reihenfolge und Beschriftung. Schalter „Sichtbar“ aus = Spalte fehlt in der Datensatz-Liste (bleibt hier konfiguriert).",
+      "Jedes Schema-Feld und Index-Werte (Dateien, Sync, Geändert) können als Tabellenspalte ein- oder ausgeblendet werden. ID und Bezeichnung bleiben in der Tabelle immer sichtbar, sobald die Spalte aktiv ist.",
     ),
   );
 
@@ -32,128 +32,161 @@ export function renderListenansicht(parent: HTMLElement, ctx: ListeRenderContext
   const list = document.createElement("div");
   list.className = "schema-editor-liste-rows";
 
-  draft.tableColumns.forEach((col, idx) => {
-    const colId = tableColumnId(col);
-    const hidden = new Set(draft.hiddenTableColumnKeys ?? []).has(colId);
+  const { configured, available } = listTableColumnLayout(draft);
 
-    const row = document.createElement("div");
-    row.className = "schema-editor-liste-row";
-
-    const moves = document.createElement("div");
-    moves.className = "schema-editor-liste-moves";
-    moves.append(
-      mkBtn("↑", idx === 0, () => {
-        moveTableCol(ctx.getDraft(), idx, -1);
-        ctx.rerender();
-      }),
-      mkBtn("↓", idx === draft.tableColumns.length - 1, () => {
-        moveTableCol(ctx.getDraft(), idx, 1);
-        ctx.rerender();
-      }),
-    );
-
-    const labelIn = document.createElement("input");
-    labelIn.className = "field";
-    labelIn.value = col.label;
-    labelIn.setAttribute("aria-label", "Spaltenlabel");
-    labelIn.addEventListener("change", () => {
-      col.label = labelIn.value;
-    });
-
-    const keySel = document.createElement("select");
-    keySel.className = "field";
-    for (const opt of columnKeyOptions(draft)) {
-      const o = document.createElement("option");
-      o.value = opt.key;
-      o.textContent = `${opt.key} (${opt.source})`;
-      keySel.append(o);
-    }
-    keySel.value = col.fieldKey;
-    keySel.addEventListener("change", () => {
-      const d = ctx.getDraft();
-      const current = d.tableColumns[idx]!;
-      const oldId = tableColumnId(current);
-      const pick = columnKeyOptions(d).find((o) => o.key === keySel.value);
-      current.fieldKey = keySel.value;
-      current.source = pick?.source ?? "meta";
-      const newId = tableColumnId(current);
-      if (oldId !== newId && d.hiddenTableColumnKeys?.length) {
-        const hid = new Set(d.hiddenTableColumnKeys);
-        if (hid.has(oldId)) {
-          hid.delete(oldId);
-          hid.add(newId);
-        }
-        if (hid.size) d.hiddenTableColumnKeys = [...hid];
-        else delete d.hiddenTableColumnKeys;
-      }
-      ctx.rerender();
-    });
-
-    const visCell = document.createElement("div");
-    const protectedCol = isProtectedTableColumn(col);
-    if (protectedCol) {
-      const tag = document.createElement("span");
-      tag.className = "schema-editor-badge";
-      tag.textContent = "immer sichtbar";
-      visCell.append(tag);
-    } else {
-      visCell.append(
-        toggleSwitch(!hidden, `Spalte ${col.label} sichtbar`, (visible) => {
-          const d = ctx.getDraft();
-          const current = d.tableColumns[idx]!;
-          const id = tableColumnId(current);
-          const next = applyTableColumnHidden(d, id, !visible);
-          ctx.setDraft(next);
-          ctx.rerender();
-        }),
-      );
-    }
-
-    if (hidden) row.classList.add("schema-editor-liste-row--hidden");
-
-    row.append(moves, labelIn, keySel, visCell);
-    list.append(row);
+  configured.forEach(({ col, hidden }, idx) => {
+    list.append(renderConfiguredRow(col, idx, hidden, draft.tableColumns.length, ctx));
   });
+
+  for (const cand of available) {
+    list.append(renderAvailableRow(cand, ctx));
+  }
 
   parent.append(list);
 
-  const addRow = document.createElement("div");
-  addRow.className = "schema-add-row";
-  const addBtn = document.createElement("button");
-  addBtn.type = "button";
-  addBtn.className = "btn";
-  addBtn.textContent = "Leere Spalte hinzufügen";
-  addBtn.addEventListener("click", () => {
-    ctx.getDraft().tableColumns.push({ fieldKey: "bezeichnung", label: "Neu", source: "meta" });
+  if (!configured.length && !available.length) {
+    parent.append(hint("Keine Felder im Schema — zuerst im Tab „Feldkatalog“ anlegen."));
+  }
+}
+
+function renderConfiguredRow(
+  col: TableColumnDef,
+  idx: number,
+  hidden: boolean,
+  colCount: number,
+  ctx: ListeRenderContext,
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "schema-editor-liste-row";
+  if (hidden) row.classList.add("schema-editor-liste-row--hidden");
+
+  const moves = document.createElement("div");
+  moves.className = "schema-editor-liste-moves";
+  moves.append(
+    mkBtn("↑", idx === 0, () => {
+      moveTableCol(ctx.getDraft(), idx, -1);
+      ctx.rerender();
+    }),
+    mkBtn("↓", idx === colCount - 1, () => {
+      moveTableCol(ctx.getDraft(), idx, 1);
+      ctx.rerender();
+    }),
+  );
+
+  const labelIn = document.createElement("input");
+  labelIn.className = "field";
+  labelIn.value = col.label;
+  labelIn.setAttribute("aria-label", "Spaltenlabel");
+  labelIn.addEventListener("change", () => {
+    col.label = labelIn.value;
+  });
+
+  const keySel = document.createElement("select");
+  keySel.className = "field";
+  const draft = ctx.getDraft();
+  for (const opt of columnKeyOptions(draft)) {
+    const o = document.createElement("option");
+    o.value = opt.key;
+    o.textContent = `${opt.key} (${opt.source})`;
+    keySel.append(o);
+  }
+  keySel.value = col.fieldKey;
+  keySel.addEventListener("change", () => {
+    const d = ctx.getDraft();
+    const current = d.tableColumns[idx]!;
+    const oldId = tableColumnId(current);
+    const pick = columnKeyOptions(d).find((o) => o.key === keySel.value);
+    current.fieldKey = keySel.value;
+    current.source = pick?.source ?? "meta";
+    const newId = tableColumnId(current);
+    if (oldId !== newId && d.hiddenTableColumnKeys?.length) {
+      const hid = new Set(d.hiddenTableColumnKeys);
+      if (hid.has(oldId)) {
+        hid.delete(oldId);
+        hid.add(newId);
+      }
+      if (hid.size) d.hiddenTableColumnKeys = [...hid];
+      else delete d.hiddenTableColumnKeys;
+    }
     ctx.rerender();
   });
-  addRow.append(addBtn);
-  parent.append(addRow);
 
-  const { available } = listTableColumnLayout(draft);
-  if (available.length) {
-    const title = document.createElement("h3");
-    title.className = "schema-editor-section-title";
-    title.textContent = "Noch nicht als Spalte";
-    parent.append(title);
-
-    for (const cand of available) {
-      const row = document.createElement("div");
-      row.className = "schema-editor-candidate-row";
-      const label = document.createElement("span");
-      label.className = "schema-editor-toggle-label";
-      label.textContent = `${cand.label}${cand.source === "index" ? " (Index)" : ""}`;
-      const add = document.createElement("button");
-      add.type = "button";
-      add.className = "btn";
-      add.textContent = "+ Spalte";
-      add.addEventListener("click", () => {
-        const next = addTableColumnToSchema(ctx.getDraft(), cand as TableColumnCandidate);
+  const visCell = document.createElement("div");
+  const protectedCol = isProtectedTableColumn(col);
+  if (protectedCol) {
+    const tag = document.createElement("span");
+    tag.className = "schema-editor-badge";
+    tag.textContent = "immer sichtbar";
+    visCell.append(tag);
+  } else {
+    visCell.append(
+      toggleSwitch(!hidden, `Spalte ${col.label} in Tabelle`, (visible) => {
+        const d = ctx.getDraft();
+        const id = tableColumnId(col);
+        const next = applyTableColumnHidden(d, id, !visible);
         ctx.setDraft(next);
         ctx.rerender();
-      });
-      row.append(label, add);
-      parent.append(row);
-    }
+      }),
+    );
   }
+
+  row.append(moves, labelIn, keySel, visCell);
+  return row;
+}
+
+function renderAvailableRow(cand: TableColumnCandidate, ctx: ListeRenderContext): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "schema-editor-liste-row schema-editor-liste-row--available";
+
+  const moves = document.createElement("div");
+  moves.className = "schema-editor-liste-moves schema-editor-liste-moves--idle";
+  const dash = document.createElement("span");
+  dash.className = "schema-editor-liste-idle";
+  dash.textContent = "—";
+  dash.title = "Reihenfolge gilt nach dem Einschalten";
+  moves.append(dash);
+
+  const label = document.createElement("span");
+  label.className = "schema-editor-toggle-label";
+  label.textContent = cand.label;
+
+  const keyBadge = document.createElement("span");
+  keyBadge.className = "schema-editor-liste-key";
+  keyBadge.textContent = `${cand.fieldKey} (${cand.source})`;
+
+  const visCell = document.createElement("div");
+  const protoCol: TableColumnDef = {
+    fieldKey: cand.fieldKey,
+    label: cand.label,
+    source: cand.source,
+  };
+  const protectedCol = isProtectedTableColumn(protoCol);
+  if (protectedCol) {
+    const wrap = document.createElement("div");
+    wrap.className = "schema-editor-liste-vis-protected";
+    const tag = document.createElement("span");
+    tag.className = "schema-editor-badge";
+    tag.textContent = "immer sichtbar";
+    wrap.append(
+      tag,
+      toggleSwitch(false, `Spalte ${cand.label} in Tabelle`, (visible) => {
+        if (!visible) return;
+        const next = setTableColumnVisible(ctx.getDraft(), cand, true);
+        ctx.setDraft(next);
+        ctx.rerender();
+      }),
+    );
+    visCell.append(wrap);
+  } else {
+    visCell.append(
+      toggleSwitch(false, `Spalte ${cand.label} in Tabelle`, (visible) => {
+        const next = setTableColumnVisible(ctx.getDraft(), cand, visible);
+        ctx.setDraft(next);
+        ctx.rerender();
+      }),
+    );
+  }
+
+  row.append(moves, label, keyBadge, visCell);
+  return row;
 }
