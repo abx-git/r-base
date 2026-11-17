@@ -20,10 +20,10 @@ import {
   mkBtn,
   moveContainerInRow,
   moveFieldInContainer,
-  toggleDraftDetailDefaultHidden,
   toggleSwitch,
   unassignedFieldKeys,
 } from "./schema-editor-shared";
+import { renderFieldPlacementList } from "./schema-editor-placement";
 
 export type DetailRenderContext = {
   draft: DatasetSchemaDefinition;
@@ -70,7 +70,7 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
     card.append(
       title,
       hint(
-        "Überschreibt „In Detail“ aus dem Feldkatalog nur hier — wird in meta.json gespeichert. Schema-Standard bleibt unverändert.",
+        "Überschreibt die Schema-Sichtbarkeit nur für diesen Datensatz — wird in meta.json gespeichert.",
       ),
     );
     const meta = datasetContext.getMeta();
@@ -103,45 +103,18 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
 
   parent.append(
     hint(
-      "Detailansicht: zuerst welche Felder standardmäßig sichtbar sind, darunter Anordnung in Containern (Breite, Datei-Block). Felddefinitionen → Feldkatalog. Tabelle → Listenansicht.",
+      "Alle Felder aus dem Feldkatalog: Sichtbarkeit im Detaildialog und Reihenfolge. Darunter optional Spaltenbreite, Dateien-Block und Feintuning per Drag & Drop.",
     ),
   );
 
-  const visSection = document.createElement("section");
-  visSection.className = "schema-editor-card schema-editor-detail-vis";
-  const visTitle = document.createElement("h3");
-  visTitle.className = "schema-editor-section-title";
-  visTitle.textContent = "Felder in der Detailansicht";
-  visSection.append(
-    visTitle,
-    hint("Schalter aus = Feld ist in neuen Datensätzen und nach Import zunächst ausgeblendet (bleibt im Layout platzierbar)."),
-  );
-  const hiddenDefaults = new Set(draft.defaultHiddenDetailFieldKeys ?? []);
-  for (const field of draft.fields) {
-    const row = document.createElement("div");
-    row.className = "schema-editor-toggle-row";
-    const name = document.createElement("span");
-    name.className = "schema-editor-toggle-label";
-    name.textContent = `${field.label} (${field.key})`;
-    if (!isOptionalSchemaField(field)) {
-      const badge = document.createElement("span");
-      badge.className = "schema-editor-badge";
-      badge.textContent = "immer sichtbar";
-      row.append(name, badge);
-    } else {
-      const visible = !hiddenDefaults.has(field.key);
-      if (!visible) row.classList.add("schema-editor-liste-row--hidden");
-      row.append(
-        name,
-        toggleSwitch(visible, `${field.label} in Detail anzeigen`, (on) => {
-          toggleDraftDetailDefaultHidden(draft, field.key, !on);
-          rerender();
-        }),
-      );
-    }
-    visSection.append(row);
-  }
-  parent.append(visSection);
+  const placementPanel = document.createElement("div");
+  placementPanel.className = "schema-editor-placement-panel";
+  parent.append(placementPanel);
+  renderFieldPlacementList(placementPanel, {
+    mode: "detail",
+    getDraft: () => draft,
+    rerender,
+  });
 
   const layoutTitle = document.createElement("h3");
   layoutTitle.className = "schema-editor-section-title";
