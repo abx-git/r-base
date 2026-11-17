@@ -186,9 +186,13 @@ function normalizeDataBlock(raw: unknown, src?: Record<string, unknown>): Datase
   return Object.keys(out).length ? out : undefined;
 }
 
-export function createEmptyMeta(locId: string, partial?: Partial<Pick<DatasetMeta, "bezeichnung" | "kategorie">>): DatasetMeta {
+export function createEmptyMeta(
+  locId: string,
+  partial?: Partial<Pick<DatasetMeta, "bezeichnung" | "kategorie">>,
+  schemaKeyOverride?: string,
+): DatasetMeta {
   const now = new Date().toISOString();
-  const schemaKey = getDefaultSchemaId();
+  const schemaKey = schemaKeyOverride?.trim() || getDefaultSchemaId();
   return {
     schemaVersion: META_SCHEMA_VERSION,
     locId,

@@ -1,4 +1,5 @@
 import { getLoxIdPrefixForMeta } from "./id-config";
+import { getDefaultSchema, getSchemaById } from "./dataset-schema-store";
 import {
   allocateNextLocId,
   folderNameForLocId,
@@ -139,11 +140,13 @@ export async function scanAllDatasets(root: FileSystemDirectoryHandle): Promise<
 export async function createDataset(
   root: FileSystemDirectoryHandle,
   partial: { bezeichnung?: string; kategorie?: string },
+  schemaId?: string,
 ): Promise<DatasetScan> {
-  const locId = await allocateNextLocId(root);
+  const schema = schemaId ? (getSchemaById(schemaId) ?? getDefaultSchema()) : getDefaultSchema();
+  const locId = await allocateNextLocId(root, schema.loxPrefix);
   const folderName = folderNameForLocId(locId);
   const folder = await root.getDirectoryHandle(folderName, { create: true });
-  const meta = createEmptyMeta(locId, partial);
+  const meta = createEmptyMeta(locId, partial, schema.id);
   await writeMetaToFolder(folder, meta);
   return { locId, folderName, handle: folder, meta };
 }

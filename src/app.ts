@@ -40,6 +40,7 @@ import { setMetaFieldValue } from "./lib/meta-field-access";
 import { normalizeDatasetTags } from "./lib/dataset-tags";
 import type { DatasetSchemaDefinition } from "./lib/dataset-schema-types";
 import {
+  getDefaultSchemaId,
   installSystemSchemaConfig,
   loadSystemSchemaConfig,
   resolveSchemaForDataset,
@@ -309,9 +310,16 @@ export function startApp(container: HTMLElement): void {
     },
     onNewDataset: async () => {
       if (!appState.rootHandle) return;
-      const scan = await createDataset(appState.rootHandle, {
-        kategorie: "",
-      });
+      const preferredSchema = appState.listViewSchemaId ?? getDefaultSchemaId();
+      const schemaId = pickSchemaIdForImport("Schema für neuen Datensatz", preferredSchema);
+      if (schemaId === null) return;
+      const scan = await createDataset(
+        appState.rootHandle,
+        {
+          kategorie: "",
+        },
+        schemaId,
+      );
       await reloadFromDisk();
       patchState({
         selectedLocId: scan.locId,

@@ -140,10 +140,14 @@ export async function importJuraCsvFile(
       continue;
     }
     try {
-      const scan = await createDataset(root, {
-        bezeichnung: row.aktueller_name?.trim() || eigeneNr,
-        kategorie: row.sammlung?.trim() || "",
-      });
+      const scan = await createDataset(
+        root,
+        {
+          bezeichnung: row.aktueller_name?.trim() || eigeneNr,
+          kategorie: row.sammlung?.trim() || "",
+        },
+        schemaId,
+      );
       applyJuraRowToMeta(scan, row, schemaId);
       applyImportTag(scan.meta, importTag);
       await writeMetaToFolder(scan.handle, scan.meta);

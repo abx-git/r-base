@@ -95,10 +95,13 @@ export function parseUserLocIdInput(
   return canonical;
 }
 
-export async function allocateNextLocId(root: FileSystemDirectoryHandle): Promise<string> {
+export async function allocateNextLocId(
+  root: FileSystemDirectoryHandle,
+  prefixOverride?: string,
+): Promise<string> {
   const taken = await collectTakenIds(root);
   const lox = defaultLoxIdService;
-  const prefix = getLoxIdPrefix();
+  const prefix = (prefixOverride?.trim() || getLoxIdPrefix()).toUpperCase();
   for (let attempt = 0; attempt < 512; attempt++) {
     const id = lox.generateId(prefix);
     const folder = folderNameForLocId(id);
