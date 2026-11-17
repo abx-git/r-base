@@ -45,6 +45,7 @@ import {
 } from "./lib/dataset-schema-store";
 import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
 import { pickSchemaIdForImport } from "./lib/schema-import-ui";
+import { openSchemaPdfExportModal } from "./ui/schema-export-modal";
 import {
   bindProjectRoot,
   readProjectConfigFromRoot,
@@ -207,6 +208,12 @@ export function startApp(container: HTMLElement): void {
     onExcelExport: () => {
       const blob = exportMetadataXlsx(appState.scans);
       downloadBlob(blob, `r-base-metadaten-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    },
+    onSchemaPdfExport: () => {
+      if (!appState.ready) return;
+      openSchemaPdfExportModal(appState.scans, (msg, isError) => {
+        patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
+      });
     },
     onExcelImport: () => {
       const input = document.createElement("input");

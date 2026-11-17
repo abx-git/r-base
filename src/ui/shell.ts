@@ -237,6 +237,13 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   csvImport.title = "Rudisten-Jura-CSV: neue Datensätze + Feldschema";
   csvImport.addEventListener("click", () => handlers.onCsvImport());
 
+  const pdfExport = el("button", "btn");
+  pdfExport.type = "button";
+  pdfExport.textContent = "Schema-PDF…";
+  pdfExport.disabled = !appState.ready;
+  pdfExport.title = "Alle Datensätze eines Schemas als PDF-Datenblätter";
+  pdfExport.addEventListener("click", () => handlers.onSchemaPdfExport());
+
   const settingsBtn = el("button", "btn");
   settingsBtn.type = "button";
   settingsBtn.textContent = "Einstellungen";
@@ -253,9 +260,9 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   panel.setAttribute("role", "menu");
   panel.tabIndex = -1;
 
-  panel.append(folderBtn, syncBtn, excelExport, excelImport, csvImport, settingsBtn);
+  panel.append(folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, settingsBtn);
 
-  for (const btn of [folderBtn, syncBtn, excelExport, excelImport, csvImport, settingsBtn]) {
+  for (const btn of [folderBtn, syncBtn, excelExport, excelImport, csvImport, pdfExport, settingsBtn]) {
     btn.classList.add("chrome-menu-item");
     btn.setAttribute("role", "menuitem");
   }
@@ -1249,6 +1256,7 @@ export type ShellHandlers = {
   onExcelExport: () => void;
   onExcelImport: () => void;
   onCsvImport: () => void;
+  onSchemaPdfExport: () => void;
   onOpenSettings: () => void;
   onNewDataset: () => Promise<void>;
   onMetaChange: (partial: { bezeichnung?: string; kategorie?: string; notes?: string }) => Promise<void>;
