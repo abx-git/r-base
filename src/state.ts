@@ -23,7 +23,6 @@ export type AppState = {
   records: IndexRecord[];
   scans: DatasetScan[];
   filterQuery: string;
-  filterKategorie: string;
   filterTagRules: TagFilterRule[];
   tableSort: TableSortState | null;
   /** Tabellenansicht: Spalten aus diesem Schema (null = Standardschema). */
@@ -99,7 +98,6 @@ export const appState: AppState = {
   records: [],
   scans: [],
   filterQuery: "",
-  filterKategorie: "",
   filterTagRules: [],
   tableSort: { fieldKey: "bezeichnung", source: "meta", dir: "asc" },
   listViewSchemaId: null,

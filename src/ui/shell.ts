@@ -317,7 +317,6 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
 function currentRecordFilter(): RecordFilterState {
   return {
     query: appState.filterQuery,
-    kategorie: appState.filterKategorie,
     tagRules: appState.filterTagRules,
   };
 }
@@ -337,16 +336,6 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
     patchState({ filterQuery: search.value });
   });
 
-  const cat = el("input", "field");
-  cat.name = "filterKategorie";
-  cat.autocomplete = "off";
-  cat.placeholder = "Kategorie-Filter";
-  cat.value = appState.filterKategorie;
-  wirePlaceholderFocus(cat);
-  cat.addEventListener("input", () => {
-    patchState({ filterKategorie: cat.value });
-  });
-
   const hasFilter = hasActiveRecordFilter(currentRecordFilter());
   const resetBtn = el("button", "btn");
   resetBtn.type = "button";
@@ -355,7 +344,6 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   resetBtn.addEventListener("click", () => {
     patchState({
       filterQuery: "",
-      filterKategorie: "",
       filterTagRules: [],
       tableSelection: [],
     });
@@ -367,7 +355,7 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   newBtn.disabled = !appState.ready;
   newBtn.addEventListener("click", () => void handlers.onNewDataset());
 
-  aside.append(search, cat);
+  aside.append(search);
   renderSidebarTagFilter(aside);
   aside.append(resetBtn, newBtn);
   root.append(aside);

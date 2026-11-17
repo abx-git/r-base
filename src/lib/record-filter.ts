@@ -7,7 +7,6 @@ import { matchesRecordSearchQuery } from "./record-search";
 
 export type RecordFilterState = {
   query: string;
-  kategorie: string;
   tagRules: TagFilterRule[];
 };
 
@@ -17,11 +16,9 @@ export function filterRecordsAdvanced(
   scans?: DatasetScan[],
 ): IndexRecord[] {
   const q = filter.query.trim();
-  const k = filter.kategorie.trim().toLowerCase();
   const metaMap = scans?.length ? metaByLocId(scans) : null;
 
   return records.filter((r) => {
-    if (k && r.kategorie.toLowerCase() !== k) return false;
     if (!matchesTagRules(r.tags, filter.tagRules)) return false;
     if (!q) return true;
 
@@ -32,5 +29,5 @@ export function filterRecordsAdvanced(
 }
 
 export function hasActiveRecordFilter(filter: RecordFilterState): boolean {
-  return Boolean(filter.query.trim() || filter.kategorie.trim() || filter.tagRules.length);
+  return Boolean(filter.query.trim() || filter.tagRules.length);
 }
