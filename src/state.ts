@@ -40,6 +40,33 @@ type Listener = () => void;
 
 const listeners = new Set<Listener>();
 
+const BANNER_DISMISS_MS = 6_000;
+let bannerDismissTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearBannerDismissTimer(): void {
+  if (bannerDismissTimer === undefined) return;
+  clearTimeout(bannerDismissTimer);
+  bannerDismissTimer = undefined;
+}
+
+function scheduleBannerDismiss(): void {
+  clearBannerDismissTimer();
+  if (!appState.message && !appState.error) return;
+  bannerDismissTimer = setTimeout(() => {
+    bannerDismissTimer = undefined;
+    if (!appState.message && !appState.error) return;
+    Object.assign(appState, { message: "", error: "" });
+    for (const l of listeners) l();
+  }, BANNER_DISMISS_MS);
+}
+
+export function dismissBanners(): void {
+  if (!appState.message && !appState.error) return;
+  clearBannerDismissTimer();
+  Object.assign(appState, { message: "", error: "" });
+  for (const l of listeners) l();
+}
+
 export const appState: AppState = {
   rootHandle: null,
   rootLabel: "",
@@ -74,6 +101,10 @@ export function subscribe(listener: Listener): () => void {
 
 export function patchState(partial: Partial<AppState>): void {
   Object.assign(appState, partial);
+  if ("message" in partial || "error" in partial) {
+    if (appState.message || appState.error) scheduleBannerDismiss();
+    else clearBannerDismissTimer();
+  }
   for (const l of listeners) l();
 }
 

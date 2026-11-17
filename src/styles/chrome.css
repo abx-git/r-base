@@ -21,6 +21,43 @@
   margin-left: auto;
 }
 
+.chrome-menu {
+  position: relative;
+}
+
+.chrome-menu-toggle::after {
+  content: " ▾";
+  font-size: 0.85em;
+  opacity: 0.65;
+}
+
+.chrome-menu-panel {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 200;
+  min-width: min(18rem, calc(100vw - 1.5rem));
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(28, 27, 25, 0.12);
+}
+
+.chrome-menu.is-open .chrome-menu-panel {
+  display: flex;
+}
+
+.chrome-menu-item {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .chrome-sub {
   flex-basis: 100%;
   font-size: 0.8rem;
@@ -297,6 +334,34 @@
 .banner {
   padding: 0.5rem 0.85rem;
   font-size: 0.88rem;
+}
+
+.banner-toast {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.banner-dismiss:hover {
+  opacity: 1;
 }
 
 .banner-error {

@@ -1,4 +1,4 @@
-import { appState, getSelectedScan, patchState, subscribe } from "../state";
+import { appState, dismissBanners, getSelectedScan, patchState, subscribe } from "../state";
 import type { IndexRecord } from "../lib/db-index";
 import { normalizeDatasetTags } from "../lib/dataset-tags";
 import { filterRecordsAdvanced, hasActiveRecordFilter, type RecordFilterState } from "../lib/record-filter";
@@ -140,13 +140,6 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   syncBtn.disabled = !appState.ready || appState.syncBusy || !handlers.canSync();
   syncBtn.addEventListener("click", () => void handlers.onSync());
 
-  const badge = el("span", `badge ${appState.globalSync.lastOk ? "badge-ok" : "badge-warn"}`);
-  if (appState.globalSync.lastRunAt) {
-    badge.textContent = `Letzter Sync: ${new Date(appState.globalSync.lastRunAt).toLocaleString("de-DE")}`;
-  } else {
-    badge.textContent = "Noch nicht synchronisiert";
-  }
-
   const excelExport = el("button", "btn");
   excelExport.type = "button";
   excelExport.textContent = "Excel export";
@@ -171,7 +164,66 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   settingsBtn.textContent = "Einstellungen";
   settingsBtn.addEventListener("click", () => handlers.onOpenSettings());
 
-  actions.append(folderBtn, syncBtn, badge, excelExport, excelImport, csvImport, settingsBtn);
+  const menu = el("div", "chrome-menu");
+  const menuToggle = el("button", "btn chrome-menu-toggle");
+  menuToggle.type = "button";
+  menuToggle.textContent = "Menü";
+  menuToggle.setAttribute("aria-haspopup", "menu");
+  menuToggle.setAttribute("aria-expanded", "false");
+
+  const panel = el("div", "chrome-menu-panel");
+  panel.setAttribute("role", "menu");
+  panel.tabIndex = -1;
+
+  panel.append(folderBtn, syncBtn, excelExport, excelImport, csvImport, settingsBtn);
+
+  for (const btn of [folderBtn, syncBtn, excelExport, excelImport, csvImport, settingsBtn]) {
+    btn.classList.add("chrome-menu-item");
+    btn.setAttribute("role", "menuitem");
+  }
+
+  const closeMenu = () => {
+    menu.classList.remove("is-open");
+    menuToggle.setAttribute("aria-expanded", "false");
+  };
+
+  const openMenu = () => {
+    menu.classList.add("is-open");
+    menuToggle.setAttribute("aria-expanded", "true");
+    const onDoc = (ev: Event) => {
+      if (!menu.contains(ev.target as Node)) {
+        closeMenu();
+        document.removeEventListener("click", onDoc);
+        document.removeEventListener("keydown", onKey);
+      }
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        closeMenu();
+        document.removeEventListener("click", onDoc);
+        document.removeEventListener("keydown", onKey);
+        menuToggle.focus();
+      }
+    };
+    window.setTimeout(() => {
+      document.addEventListener("click", onDoc);
+      document.addEventListener("keydown", onKey);
+    }, 0);
+  };
+
+  menuToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains("is-open")) closeMenu();
+    else openMenu();
+  });
+
+  panel.addEventListener("click", (e) => {
+    const t = e.target;
+    if (t instanceof HTMLElement && t.closest("button:not(:disabled)")) closeMenu();
+  });
+
+  menu.append(menuToggle, panel);
+  actions.append(menu);
   header.append(title, actions);
 
   if (appState.rootLabel) {
@@ -1052,17 +1104,23 @@ function renderSyncLog(root: HTMLElement): void {
   root.append(panel);
 }
 
+function renderBanner(root: HTMLElement, text: string, variant: "error" | "ok"): void {
+  const banner = el("div", `banner banner-${variant} banner-toast`);
+  banner.setAttribute("role", "status");
+  const label = el("span", "banner-text");
+  label.textContent = text;
+  const close = el("button", "banner-dismiss");
+  close.type = "button";
+  close.setAttribute("aria-label", "Meldung schließen");
+  close.textContent = "×";
+  close.addEventListener("click", () => dismissBanners());
+  banner.append(label, close);
+  root.append(banner);
+}
+
 function renderMessages(root: HTMLElement): void {
-  if (appState.error) {
-    const err = el("div", "banner banner-error");
-    err.textContent = appState.error;
-    root.append(err);
-  }
-  if (appState.message) {
-    const msg = el("div", "banner banner-ok");
-    msg.textContent = appState.message;
-    root.append(msg);
-  }
+  if (appState.error) renderBanner(root, appState.error, "error");
+  if (appState.message) renderBanner(root, appState.message, "ok");
 }
 
 export type ShellHandlers = {
