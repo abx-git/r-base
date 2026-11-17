@@ -1,8 +1,9 @@
 import type { IndexRecord } from "./db-index";
 import type { DatasetScan } from "./fs-local";
 import { matchesTagRules, type TagFilterRule } from "./dataset-tags";
-import { datasetSearchHaystack, metaByLocId } from "./dataset-search";
+import { metaByLocId } from "./dataset-search";
 import { resolveSchemaForDataset } from "./dataset-schema-store";
+import { matchesRecordSearchQuery } from "./record-search";
 
 export type RecordFilterState = {
   query: string;
@@ -15,7 +16,7 @@ export function filterRecordsAdvanced(
   filter: RecordFilterState,
   scans?: DatasetScan[],
 ): IndexRecord[] {
-  const q = filter.query.trim().toLowerCase();
+  const q = filter.query.trim();
   const k = filter.kategorie.trim().toLowerCase();
   const metaMap = scans?.length ? metaByLocId(scans) : null;
 
@@ -24,19 +25,9 @@ export function filterRecordsAdvanced(
     if (!matchesTagRules(r.tags, filter.tagRules)) return false;
     if (!q) return true;
 
-    if (metaMap) {
-      const meta = metaMap.get(r.locId);
-      if (meta) {
-        const schema = resolveSchemaForDataset(meta);
-        if (datasetSearchHaystack(meta, schema).includes(q)) return true;
-      }
-    }
-
-    return (
-      r.locId.toLowerCase().includes(q) ||
-      r.bezeichnung.toLowerCase().includes(q) ||
-      r.kategorie.toLowerCase().includes(q)
-    );
+    const meta = metaMap?.get(r.locId);
+    const schema = meta ? resolveSchemaForDataset(meta) : undefined;
+    return matchesRecordSearchQuery(q, r, meta, schema);
   });
 }
 

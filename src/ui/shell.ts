@@ -197,7 +197,9 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   search.type = "search";
   search.name = "filterQuery";
   search.autocomplete = "off";
-  search.placeholder = "Suche in allen Feldern (ohne Tags)";
+  search.placeholder = "Volltext *…* oder spalte:*…* (z. B. bezeichnung:*Jura*)";
+  search.title =
+    "Ohne Spaltenname: alle Felder (ohne Tags), * als Platzhalter. Mit feld:muster nur diese Spalte (Key oder Label, z. B. kategorie:*Muster*).";
   search.value = appState.filterQuery;
   wirePlaceholderFocus(search);
   search.addEventListener("input", () => {
@@ -311,49 +313,46 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   const selectedVisible = visibleLocIds.filter((id) => selection.has(id));
   const allVisibleSelected = visibleLocIds.length > 0 && selectedVisible.length === visibleLocIds.length;
 
-  const bulkBar = el("div", "table-bulk-bar");
-  const bulkCount = el("span", "table-bulk-count");
-  bulkCount.textContent =
-    selectedVisible.length > 0
-      ? `${selectedVisible.length} ausgewählt`
-      : "Keine Auswahl";
-  const bulkDelete = el("button", "btn btn-danger");
-  bulkDelete.type = "button";
-  bulkDelete.textContent = "Löschen…";
-  bulkDelete.disabled = selectedVisible.length === 0 || !appState.ready;
-  bulkDelete.title = "Ausgewählte nach deleted/ verschieben (Strg+Z je Datensatz)";
-  bulkDelete.addEventListener("click", () => {
-    if (!selectedVisible.length) return;
-    if (
-      !window.confirm(
-        `${selectedVisible.length} Datensätze nach „deleted“ verschieben?\n\nStrg+Z / ⌘Z holt jeweils den zuletzt gelöschten zurück.`,
-      )
-    ) {
-      return;
-    }
-    void handlers.onBulkSoftDelete(selectedVisible).then(() => handlers.onRerender());
-  });
-  const bulkTag = el("button", "btn");
-  bulkTag.type = "button";
-  bulkTag.textContent = "Tag zuweisen…";
-  bulkTag.disabled = selectedVisible.length === 0 || !appState.ready;
-  bulkTag.addEventListener("click", () => {
-    if (!selectedVisible.length) return;
-    const raw = window.prompt(`Tag für ${selectedVisible.length} Datensätze:`, "");
-    if (raw === null) return;
-    const tag = raw.trim();
-    if (!tag) return;
-    void handlers.onBulkAssignTag(selectedVisible, tag).then(() => handlers.onRerender());
-  });
-  const bulkClear = el("button", "btn");
-  bulkClear.type = "button";
-  bulkClear.textContent = "Auswahl aufheben";
-  bulkClear.disabled = selectedVisible.length === 0;
-  bulkClear.addEventListener("click", () => {
-    patchState({ tableSelection: [] });
-    handlers.onRerender();
-  });
-  bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear);
+  let bulkBar: HTMLElement | null = null;
+  if (selectedVisible.length > 0) {
+    bulkBar = el("div", "table-bulk-bar");
+    const bulkCount = el("span", "table-bulk-count");
+    bulkCount.textContent = `${selectedVisible.length} ausgewählt`;
+    const bulkDelete = el("button", "btn btn-danger");
+    bulkDelete.type = "button";
+    bulkDelete.textContent = "Löschen…";
+    bulkDelete.disabled = !appState.ready;
+    bulkDelete.title = "Ausgewählte nach deleted/ verschieben (Strg+Z je Datensatz)";
+    bulkDelete.addEventListener("click", () => {
+      if (
+        !window.confirm(
+          `${selectedVisible.length} Datensätze nach „deleted“ verschieben?\n\nStrg+Z / ⌘Z holt jeweils den zuletzt gelöschten zurück.`,
+        )
+      ) {
+        return;
+      }
+      void handlers.onBulkSoftDelete(selectedVisible).then(() => handlers.onRerender());
+    });
+    const bulkTag = el("button", "btn");
+    bulkTag.type = "button";
+    bulkTag.textContent = "Tag zuweisen…";
+    bulkTag.disabled = !appState.ready;
+    bulkTag.addEventListener("click", () => {
+      const raw = window.prompt(`Tag für ${selectedVisible.length} Datensätze:`, "");
+      if (raw === null) return;
+      const tag = raw.trim();
+      if (!tag) return;
+      void handlers.onBulkAssignTag(selectedVisible, tag).then(() => handlers.onRerender());
+    });
+    const bulkClear = el("button", "btn");
+    bulkClear.type = "button";
+    bulkClear.textContent = "Auswahl aufheben";
+    bulkClear.addEventListener("click", () => {
+      patchState({ tableSelection: [] });
+      handlers.onRerender();
+    });
+    bulkBar.append(bulkCount, bulkDelete, bulkTag, bulkClear);
+  }
 
   const tableWrap = el("div", "table-wrap");
   const table = el("table", "data-table data-table--compact");
@@ -451,7 +450,9 @@ function renderTable(main: HTMLElement, handlers: ShellHandlers): void {
   backHint.textContent = rows.length
     ? `${rows.length} Datensätze${sortHint}`
     : "Keine Datensätze — neu anlegen oder Ordner wählen.";
-  main.append(backHint, bulkBar, tableWrap);
+  main.append(backHint);
+  if (bulkBar) main.append(bulkBar);
+  main.append(tableWrap);
 }
 
 function beginIdChange(scan: { meta: { locId: string } }, handlers: ShellHandlers): void {
