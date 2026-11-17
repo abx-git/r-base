@@ -1,4 +1,3 @@
-import type { DatasetMeta } from "../lib/meta-schema";
 import type { DatasetSchemaDefinition, LayoutContainer } from "../lib/dataset-schema-types";
 import { fieldDefByKey } from "../lib/meta-field-access";
 import {
@@ -17,23 +16,11 @@ import {
   hint,
   mkBtn,
   moveContainerInRow,
-  moveFieldInContainer,
-  removeFieldFromAllContainers,
 } from "./schema-editor-shared";
 import { renderDetailVisibilityList } from "./schema-editor-placement";
 
 export type DetailRenderContext = {
   draft: DatasetSchemaDefinition;
-  datasetContext?: {
-    locId: string;
-    getMeta: () => DatasetMeta | undefined;
-    onSetFieldHidden: (
-      fieldKey: string,
-      hidden: boolean,
-      schema: DatasetSchemaDefinition,
-    ) => Promise<void>;
-    onRerender: () => void;
-  };
   rerender: () => void;
 };
 
@@ -77,7 +64,9 @@ export function renderDetailformular(parent: HTMLElement, ctx: DetailRenderConte
   layoutTitle.textContent = "Anordnung";
   parent.append(
     layoutTitle,
-    hint("Nur Felder mit „Im Detail“ aktiv. Per Drag & Drop in Container ziehen oder unter „Nicht platziert“ lassen."),
+    hint(
+      "Nur Felder mit „Im Detail“ aktiv. Am ⠿-Griff ziehen — die Linie zeigt die Einfügeposition. Reihenfolge innerhalb eines Containers ebenfalls per Drag & Drop.",
+    ),
   );
 
   const layoutWrap = document.createElement("div");
@@ -216,7 +205,7 @@ function renderContainer(
   for (const key of container.fieldKeys) {
     if (!draft.fields.some((f) => f.key === key)) continue;
     if (!isDetailFieldVisibleInSchema(draft, key)) continue;
-    zone.append(renderFieldRow(key, container, draft, rerender));
+    zone.append(renderFieldRow(key, draft));
   }
   enableDrop(zone, draft, rerender);
   box.append(zone);
@@ -286,31 +275,9 @@ function renderFilesContainerEditor(
   return box;
 }
 
-function renderFieldRow(
-  key: string,
-  container: LayoutContainer,
-  draft: DatasetSchemaDefinition,
-  rerender: () => void,
-): HTMLElement {
+function renderFieldRow(key: string, draft: DatasetSchemaDefinition): HTMLElement {
   const row = document.createElement("div");
   row.className = "schema-editor-field-row";
-  const idx = container.fieldKeys.indexOf(key);
-  const poolBtn = mkBtn("↩", false, () => {
-    removeFieldFromAllContainers(draft, key);
-    rerender();
-  });
-  poolBtn.title = "Nach „Nicht platziert“";
-  row.append(
-    fieldChip(key, draft),
-    poolBtn,
-    mkBtn("↑", idx <= 0, () => {
-      moveFieldInContainer(container, key, -1);
-      rerender();
-    }),
-    mkBtn("↓", idx < 0 || idx >= container.fieldKeys.length - 1, () => {
-      moveFieldInContainer(container, key, 1);
-      rerender();
-    }),
-  );
+  row.append(fieldChip(key, draft));
   return row;
 }

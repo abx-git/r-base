@@ -17,8 +17,6 @@ import {
   hint,
   mkBtn,
   moveContainerInRow,
-  moveFieldInContainer,
-  removeFieldFromAllExportContainers,
 } from "./schema-editor-shared";
 import { renderFieldPlacementList } from "./schema-editor-placement";
 
@@ -87,7 +85,7 @@ export function renderExportformular(parent: HTMLElement, ctx: ExportRenderConte
   parent.append(
     layoutTitle,
     hint(
-      "Nur Felder mit „Im Export“ aktiv. Container „Bilder“ bindet Fotos des Datensatzes ein. Felder per Drag & Drop zuordnen.",
+      "Nur Felder mit „Im Export“ aktiv. Container „Bilder“ bindet Fotos ein. Am ⠿-Griff ziehen — die Linie markiert die Einfügeposition im Container.",
     ),
   );
 
@@ -240,7 +238,7 @@ function renderExportContainer(
   for (const key of container.fieldKeys) {
     if (!draft.fields.some((f) => f.key === key)) continue;
     if (!isExportFieldVisibleInSchema(draft, key)) continue;
-    zone.append(renderFieldRow(key, container, draft, rerender));
+    zone.append(renderFieldRow(key, draft));
   }
   enableExportDrop(zone, draft, rerender);
   box.append(zone);
@@ -362,31 +360,9 @@ function renderExportFilesContainerEditor(
   return box;
 }
 
-function renderFieldRow(
-  key: string,
-  container: LayoutContainer,
-  draft: DatasetSchemaDefinition,
-  rerender: () => void,
-): HTMLElement {
+function renderFieldRow(key: string, draft: DatasetSchemaDefinition): HTMLElement {
   const row = document.createElement("div");
   row.className = "schema-editor-field-row";
-  const idx = container.fieldKeys.indexOf(key);
-  const poolBtn = mkBtn("↩", false, () => {
-    removeFieldFromAllExportContainers(draft, key);
-    rerender();
-  });
-  poolBtn.title = "Nach „Nicht platziert“";
-  row.append(
-    fieldChip(key, draft),
-    poolBtn,
-    mkBtn("↑", idx <= 0, () => {
-      moveFieldInContainer(container, key, -1);
-      rerender();
-    }),
-    mkBtn("↓", idx < 0 || idx >= container.fieldKeys.length - 1, () => {
-      moveFieldInContainer(container, key, 1);
-      rerender();
-    }),
-  );
+  row.append(fieldChip(key, draft));
   return row;
 }

@@ -19,7 +19,7 @@ export type ProjectSettings = {
 };
 
 const DEFAULT_UI: ProjectUiSettings = {
-  showObsoleteFieldsInDetail: true,
+  showObsoleteFieldsInDetail: false,
 };
 
 let projectUi: ProjectUiSettings = { ...DEFAULT_UI };

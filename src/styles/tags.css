@@ -4,13 +4,6 @@
   margin: 0.15rem 0 0.1rem;
 }
 
-.tag-section-hint {
-  font-size: 0.72rem;
-  margin: 0 0 0.35rem;
-  color: var(--muted);
-  line-height: 1.35;
-}
-
 .tag-cloud {
   display: flex;
   flex-wrap: wrap;

@@ -64,9 +64,7 @@ export function renderSidebarTagFilter(parent: HTMLElement): void {
   const section = el("div", "tag-filter-section");
   const title = el("p", "tag-section-title");
   title.textContent = "Tags";
-  const hint = el("p", "tag-section-hint");
-  hint.textContent = "Klick auf Tag: aus → + enthalten → − ausschließen";
-  section.append(title, hint);
+  section.append(title);
 
   const rules = appState.filterTagRules;
   const known = collectKnownDatasetTags(appState.scans);
@@ -82,26 +80,7 @@ export function renderSidebarTagFilter(parent: HTMLElement): void {
     cloud.append(buildFilterChip(tag, filterChipMode(rules, tag)));
   }
 
-  const addRow = el("div", "tag-add-row");
-  const input = el("input", "tag-cloud-input");
-  input.name = "filterTagAdd";
-  input.placeholder = "Tag für Filter eingeben …";
-  input.autocomplete = "off";
-  input.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    const raw = input.value.trim();
-    if (!raw) return;
-    const parts = normalizeDatasetTags(raw.split(/[,;]/));
-    let next = [...rules];
-    for (const t of parts) {
-      if (!filterRuleForTag(next, t)) next = [...next, { tag: t, mode: "include" as const }];
-    }
-    patchState({ filterTagRules: next });
-    input.value = "";
-  });
-  addRow.append(input);
-  section.append(cloud, addRow);
+  section.append(cloud);
   parent.append(section);
 }
 
@@ -111,60 +90,70 @@ export function renderDatasetTagsField(
   onChange: (tags: string[]) => void,
 ): void {
   const wrap = el("div", "tag-field-wrap");
-  const label = el("span");
-  label.textContent = "Tags";
-  label.style.fontSize = "0.85rem";
-  wrap.append(label);
-
-  const known = collectKnownDatasetTags(appState.scans);
-  const activeKeys = new Set(tags.map((t) => t.toLowerCase()));
-
-  const assigned = el("div", "tag-cloud");
-  for (const tag of tags) {
-    const chip = el("span", "tag-chip tag-chip--assigned");
-    const text = el("span");
-    text.textContent = tag;
-    const remove = el("button", "tag-chip-remove");
-    remove.type = "button";
-    remove.setAttribute("aria-label", `Tag ${tag} entfernen`);
-    remove.textContent = "×";
-    remove.addEventListener("click", () => {
-      onChange(tags.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
-    });
-    chip.append(text, remove);
-    assigned.append(chip);
-  }
-
-  const suggestions = el("div", "tag-cloud tag-cloud--suggest");
-  let suggestCount = 0;
-  for (const k of known) {
-    if (activeKeys.has(k.toLowerCase())) continue;
-    suggestCount++;
-    const chip = el("button", "tag-chip tag-chip--suggestion");
-    chip.type = "button";
-    chip.textContent = k;
-    chip.addEventListener("click", () => {
-      onChange(normalizeDatasetTags([...tags, k]));
-    });
-    suggestions.append(chip);
-  }
-
-  const addRow = el("div", "tag-add-row");
-  const input = el("input", "tag-cloud-input");
-  input.placeholder = "Neuer Tag, Enter";
-  input.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    const v = input.value.trim();
-    if (!v) return;
-    const add = normalizeDatasetTags(v.split(/[,;]/));
-    onChange(normalizeDatasetTags([...tags, ...add]));
-    input.value = "";
-  });
-  addRow.append(input);
-
-  wrap.append(assigned);
-  if (suggestCount) wrap.append(suggestions);
-  wrap.append(addRow);
   parent.append(wrap);
+
+  const apply = (next: string[]) => {
+    const normalized = normalizeDatasetTags(next);
+    paint(normalized);
+    onChange(normalized);
+  };
+
+  const paint = (current: string[]) => {
+    wrap.replaceChildren();
+    const label = el("span");
+    label.textContent = "Tags";
+    label.style.fontSize = "0.85rem";
+    wrap.append(label);
+
+    const known = collectKnownDatasetTags(appState.scans);
+    const activeKeys = new Set(current.map((t) => t.toLowerCase()));
+
+    const assigned = el("div", "tag-cloud");
+    for (const tag of current) {
+      const chip = el("span", "tag-chip tag-chip--assigned");
+      const text = el("span");
+      text.textContent = tag;
+      const remove = el("button", "tag-chip-remove");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Tag ${tag} entfernen`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        apply(current.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
+      });
+      chip.append(text, remove);
+      assigned.append(chip);
+    }
+    wrap.append(assigned);
+
+    const suggestions = el("div", "tag-cloud tag-cloud--suggest");
+    let suggestCount = 0;
+    for (const k of known) {
+      if (activeKeys.has(k.toLowerCase())) continue;
+      suggestCount++;
+      const chip = el("button", "tag-chip tag-chip--suggestion");
+      chip.type = "button";
+      chip.textContent = k;
+      chip.addEventListener("click", () => {
+        apply([...current, k]);
+      });
+      suggestions.append(chip);
+    }
+    if (suggestCount) wrap.append(suggestions);
+
+    const addRow = el("div", "tag-add-row");
+    const input = el("input", "tag-cloud-input field");
+    input.placeholder = "Neuer Tag, Enter";
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const v = input.value.trim();
+      if (!v) return;
+      const add = normalizeDatasetTags(v.split(/[,;]/));
+      apply([...current, ...add]);
+    });
+    addRow.append(input);
+    wrap.append(addRow);
+  };
+
+  paint(normalizeDatasetTags(tags));
 }

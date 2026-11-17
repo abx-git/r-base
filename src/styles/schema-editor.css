@@ -531,6 +531,22 @@
   gap: 0.35rem;
 }
 
+.schema-editor-dropzone.has-drop-marker {
+  position: relative;
+}
+
+.layout-drop-insert-line {
+  position: absolute;
+  left: 0.4rem;
+  right: 0.4rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  pointer-events: none;
+  z-index: 3;
+}
+
 .schema-editor-dropzone .schema-editor-field-row {
   width: 100%;
   flex: 0 0 auto;

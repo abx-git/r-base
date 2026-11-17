@@ -132,6 +132,13 @@ async function persistMetaFieldValue(locId: string, fieldKey: string, value: unk
   scan.meta.lastModified = new Date().toISOString();
   await writeMetaToFolder(scan.handle, scan.meta);
   await refreshIndexAfterMetaWrite(scan);
+  const editingThisDetail =
+    appState.view === "detail" &&
+    appState.selectedLocId &&
+    locIdsReferToSameRecord(appState.selectedLocId, scan.meta.locId);
+  if (fieldKey === "tags" || !editingThisDetail) {
+    patchState({ records: appState.records, globalSync: appState.globalSync });
+  }
 }
 
 bindMetaAutoSave(persistMetaFieldValue);
@@ -218,6 +225,7 @@ export function startApp(container: HTMLElement): void {
         query: appState.filterQuery,
         tagRules: appState.filterTagRules,
         columnFilters: appState.tableColumnFilters,
+        listSchemaId: activeListSchemaId(appState.listViewSchemaId),
       });
       const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
       openSchemaExcelExportModal(scans, appState.records, filter, (msg, isError) => {
@@ -230,6 +238,7 @@ export function startApp(container: HTMLElement): void {
         query: appState.filterQuery,
         tagRules: appState.filterTagRules,
         columnFilters: appState.tableColumnFilters,
+        listSchemaId: activeListSchemaId(appState.listViewSchemaId),
       });
       const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
       openSchemaPdfExportModal(scans, filter, (msg, isError) => {
@@ -245,6 +254,7 @@ export function startApp(container: HTMLElement): void {
         query: appState.filterQuery,
         tagRules: appState.filterTagRules,
         columnFilters: appState.tableColumnFilters,
+        listSchemaId: activeListSchemaId(appState.listViewSchemaId),
       });
       const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
       openSchemaHtmlExportModal(appState.rootHandle, scans, filter, (msg, isError) => {
@@ -307,7 +317,6 @@ export function startApp(container: HTMLElement): void {
       openSettingsModal({
         onClose: () => patchState({}),
         onSchemaChanged: () => patchState({ message: "Schema-Konfiguration aktualisiert." }),
-        onSetFieldHidden: handleSetFieldHidden,
         onRerender: () => forceAppRerender(),
       });
     },

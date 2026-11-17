@@ -178,6 +178,17 @@
   margin: 0.15rem 0 0.35rem;
 }
 
+.sidebar-reset-filter {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.sidebar-new-dataset {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
 .main-pane {
   padding: 0.85rem 1rem 2rem;
   min-height: 0;
@@ -579,6 +590,26 @@
 .banner {
   padding: 0.5rem 0.85rem;
   font-size: 0.88rem;
+}
+
+.banner-stack {
+  position: fixed;
+  top: max(0.45rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  width: min(40rem, calc(100vw - 1.25rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  pointer-events: none;
+}
+
+.banner-stack .banner-toast {
+  pointer-events: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(28, 27, 25, 0.14);
 }
 
 .banner-toast {

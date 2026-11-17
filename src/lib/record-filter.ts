@@ -14,17 +14,21 @@ export type RecordFilterState = {
   query: string;
   tagRules: TagFilterRule[];
   columnFilters: TableColumnFiltersState;
+  /** Nur Datensätze dieses Schemas (Kopfzeilen-Auswahl). */
+  listSchemaId?: string;
 };
 
 export function buildRecordFilter(parts: {
   query: string;
   tagRules: TagFilterRule[];
   columnFilters?: TableColumnFiltersState;
+  listSchemaId?: string;
 }): RecordFilterState {
   return {
     query: parts.query,
     tagRules: parts.tagRules,
     columnFilters: parts.columnFilters ?? {},
+    listSchemaId: parts.listSchemaId,
   };
 }
 
@@ -40,6 +44,10 @@ export function filterRecordsAdvanced(
     if (!matchesTagRules(r.tags, filter.tagRules)) return false;
 
     const meta = metaMap?.get(r.locId);
+    if (filter.listSchemaId) {
+      if (!meta) return false;
+      if (resolveSchemaForDataset(meta).id !== filter.listSchemaId) return false;
+    }
     const schema = meta ? resolveSchemaForDataset(meta) : undefined;
 
     if (!matchesTableColumnFilters(r, meta, filter.columnFilters)) return false;

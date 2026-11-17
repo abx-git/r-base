@@ -35,15 +35,10 @@ export const SCHEMA_EDITOR_TABS: {
   { id: "export", label: "Exportformular", description: "PDF-Export: Felder, Anordnung & Bilder" },
 ];
 
-export function mapInitialTab(
-  raw: SchemaEditorInitialTab | undefined,
-  hasDatasetContext: boolean,
-): SchemaEditorTabId {
+export function mapInitialTab(raw: SchemaEditorInitialTab | undefined): SchemaEditorTabId {
   if (!raw || raw === "general") return "stammdaten";
   if (raw === "fields") return "felder";
-  if (raw === "table" || raw === "visibility") {
-    return hasDatasetContext ? "detail" : "liste";
-  }
+  if (raw === "table" || raw === "visibility") return "liste";
   if (raw === "layout") return "detail";
   if (raw === "stammdaten" || raw === "felder" || raw === "liste" || raw === "excel" || raw === "detail" || raw === "export") return raw;
   return "stammdaten";
@@ -207,20 +202,156 @@ export function moveContainerInRow(containers: LayoutContainer[], containerId: s
   containers[next] = tmp;
 }
 
-export function moveFieldInContainer(container: LayoutContainer, fieldKey: string, delta: number): void {
-  const idx = container.fieldKeys.indexOf(fieldKey);
-  if (idx < 0) return;
-  const next = idx + delta;
-  if (next < 0 || next >= container.fieldKeys.length) return;
-  const keys = container.fieldKeys;
-  const tmp = keys[idx]!;
-  keys[idx] = keys[next]!;
-  keys[next] = tmp;
+export function insertFieldKeyInContainer(
+  container: LayoutContainer,
+  fieldKey: string,
+  index: number,
+): void {
+  const keys = (container.fieldKeys ?? []).filter((k) => k !== fieldKey);
+  const at = Math.max(0, Math.min(index, keys.length));
+  keys.splice(at, 0, fieldKey);
+  container.fieldKeys = keys;
 }
 
 /** Drop-Ziel für Felder ohne Container-Zuordnung (nur im Schema-Editor). */
 export const DETAIL_UNPLACED_DROP_ID = "__unplaced__";
 export const EXPORT_UNPLACED_DROP_ID = "__export_unplaced__";
+
+let activeFieldDragKey: string | null = null;
+
+function fieldKeyFromDropSlot(el: HTMLElement): string | undefined {
+  if (el.classList.contains("layout-chip-wrap")) return el.dataset.fieldKey;
+  const chip = el.querySelector<HTMLElement>(".layout-chip-wrap");
+  return chip?.dataset.fieldKey;
+}
+
+function dropSlotsInZone(zone: HTMLElement, excludeKey: string | null): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (const child of zone.children) {
+    if (!(child instanceof HTMLElement)) continue;
+    if (!child.classList.contains("schema-editor-field-row") && !child.classList.contains("layout-chip-wrap")) {
+      continue;
+    }
+    const key = fieldKeyFromDropSlot(child);
+    if (excludeKey && key === excludeKey) continue;
+    out.push(child);
+  }
+  return out;
+}
+
+function clearZoneDropUi(zone: HTMLElement): void {
+  zone.classList.remove("is-over", "has-drop-marker");
+  delete zone.dataset.dropInsertIndex;
+  zone.querySelector(".layout-drop-insert-line")?.remove();
+}
+
+export function clearAllFieldDropZones(): void {
+  activeFieldDragKey = null;
+  for (const zone of document.querySelectorAll<HTMLElement>(".schema-editor-dropzone")) {
+    clearZoneDropUi(zone);
+  }
+}
+
+function resolveInsertIndex(clientY: number, slots: HTMLElement[]): number {
+  for (let i = 0; i < slots.length; i++) {
+    const rect = slots[i]!.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (clientY < mid) return i;
+  }
+  return slots.length;
+}
+
+function positionDropInsertLine(zone: HTMLElement, clientY: number, excludeKey: string | null): number {
+  const zoneRect = zone.getBoundingClientRect();
+  const slots = dropSlotsInZone(zone, excludeKey);
+  const insertIndex = resolveInsertIndex(clientY, slots);
+
+  let markerTop: number;
+  if (slots.length === 0) {
+    markerTop = 6;
+  } else if (insertIndex >= slots.length) {
+    const last = slots[slots.length - 1]!.getBoundingClientRect();
+    markerTop = last.bottom - zoneRect.top + 3;
+  } else {
+    const target = slots[insertIndex]!.getBoundingClientRect();
+    markerTop = target.top - zoneRect.top - 3;
+  }
+
+  zone.dataset.dropInsertIndex = String(insertIndex);
+  let line = zone.querySelector<HTMLElement>(".layout-drop-insert-line");
+  if (!line) {
+    line = document.createElement("div");
+    line.className = "layout-drop-insert-line";
+    line.setAttribute("aria-hidden", "true");
+    zone.append(line);
+  }
+  line.style.top = `${Math.max(2, markerTop)}px`;
+  zone.classList.add("has-drop-marker", "is-over");
+  return insertIndex;
+}
+
+type FieldDropZoneMode = "detail" | "export";
+
+function attachFieldDropZone(
+  zone: HTMLElement,
+  draft: DatasetSchemaDefinition,
+  rerender: () => void,
+  mode: FieldDropZoneMode,
+  unplacedDropId: string,
+): void {
+  const isUnplacedPool = zone.dataset.containerId === unplacedDropId;
+
+  zone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    if (isUnplacedPool) {
+      zone.classList.add("is-over");
+      zone.querySelector(".layout-drop-insert-line")?.remove();
+      zone.classList.remove("has-drop-marker");
+      delete zone.dataset.dropInsertIndex;
+      return;
+    }
+    positionDropInsertLine(zone, e.clientY, activeFieldDragKey);
+  });
+
+  zone.addEventListener("dragleave", (e) => {
+    if (e.relatedTarget instanceof Node && zone.contains(e.relatedTarget)) return;
+    clearZoneDropUi(zone);
+  });
+
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const key = e.dataTransfer?.getData("text/field-key");
+    const savedInsertIndex = zone.dataset.dropInsertIndex;
+    clearZoneDropUi(zone);
+    if (!key) return;
+
+    const targetId = zone.dataset.containerId;
+    if (targetId === unplacedDropId) {
+      if (mode === "detail") removeFieldFromAllContainers(draft, key);
+      else removeFieldFromAllExportContainers(draft, key);
+      rerender();
+      return;
+    }
+
+    const container =
+      mode === "detail" ? findContainer(draft, targetId ?? "") : findExportContainer(draft, targetId ?? "");
+    if (!container || isReservedLayoutContainer(container)) return;
+    if (isFilesLayoutContainer(container)) return;
+
+    const visible =
+      mode === "detail" ? isDetailFieldVisibleInSchema(draft, key) : isExportFieldVisibleInSchema(draft, key);
+    if (!visible) return;
+
+    if (mode === "detail") removeFieldFromAllContainers(draft, key);
+    else removeFieldFromAllExportContainers(draft, key);
+
+    const parsed = savedInsertIndex !== undefined ? Number(savedInsertIndex) : NaN;
+    const insertIndex = Number.isFinite(parsed) ? parsed : (container.fieldKeys?.length ?? 0);
+    insertFieldKeyInContainer(container, key, insertIndex);
+    rerender();
+  });
+}
 
 export function fieldChip(key: string, draft: DatasetSchemaDefinition): HTMLElement {
   const wrap = document.createElement("div");
@@ -244,9 +375,13 @@ export function fieldChip(key: string, draft: DatasetSchemaDefinition): HTMLElem
     e.dataTransfer?.setData("text/field-key", key);
     e.dataTransfer?.setData("text/plain", key);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    activeFieldDragKey = key;
     wrap.classList.add("is-dragging");
   };
-  const onDragEnd = () => wrap.classList.remove("is-dragging");
+  const onDragEnd = () => {
+    wrap.classList.remove("is-dragging");
+    clearAllFieldDropZones();
+  };
   handle.addEventListener("dragstart", onDragStart);
   handle.addEventListener("dragend", onDragEnd);
 
@@ -259,28 +394,7 @@ export function enableExportDrop(
   draft: DatasetSchemaDefinition,
   rerender: () => void,
 ): void {
-  zone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    zone.classList.add("is-over");
-  });
-  zone.addEventListener("dragleave", () => zone.classList.remove("is-over"));
-  zone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    zone.classList.remove("is-over");
-    const key = e.dataTransfer?.getData("text/field-key");
-    if (!key) return;
-    removeFieldFromAllExportContainers(draft, key);
-    const targetId = zone.dataset.containerId;
-    if (targetId === EXPORT_UNPLACED_DROP_ID) {
-      rerender();
-      return;
-    }
-    const container = findExportContainer(draft, targetId ?? "");
-    if (!container || isReservedLayoutContainer(container)) return;
-    if (!isExportFieldVisibleInSchema(draft, key)) return;
-    if (!container.fieldKeys.includes(key)) container.fieldKeys.push(key);
-    rerender();
-  });
+  attachFieldDropZone(zone, draft, rerender, "export", EXPORT_UNPLACED_DROP_ID);
 }
 
 export function enableDrop(
@@ -288,28 +402,7 @@ export function enableDrop(
   draft: DatasetSchemaDefinition,
   rerender: () => void,
 ): void {
-  zone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    zone.classList.add("is-over");
-  });
-  zone.addEventListener("dragleave", () => zone.classList.remove("is-over"));
-  zone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    zone.classList.remove("is-over");
-    const key = e.dataTransfer?.getData("text/field-key");
-    if (!key) return;
-    removeFieldFromAllContainers(draft, key);
-    const targetId = zone.dataset.containerId;
-    if (targetId === DETAIL_UNPLACED_DROP_ID) {
-      rerender();
-      return;
-    }
-    const container = findContainer(draft, targetId ?? "");
-    if (!container || isFilesLayoutContainer(container)) return;
-    if (!isDetailFieldVisibleInSchema(draft, key)) return;
-    if (!container.fieldKeys.includes(key)) container.fieldKeys.push(key);
-    rerender();
-  });
+  attachFieldDropZone(zone, draft, rerender, "detail", DETAIL_UNPLACED_DROP_ID);
 }
 
 export function fieldInput(

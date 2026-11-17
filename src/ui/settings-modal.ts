@@ -7,24 +7,14 @@ import {
 import { getLoxIdPrefix } from "../lib/id-config";
 import { propfind } from "../lib/webdav-client";
 import { openSystemConfigModal } from "./system-config-modal";
-import {
-  activeListSchemaId,
-  loadSystemSchemaConfig,
-  resolveSchemaForDataset,
-} from "../lib/dataset-schema-store";
+import { activeListSchemaId, loadSystemSchemaConfig } from "../lib/dataset-schema-store";
 import { getProjectUiSettings, persistCurrentProjectConfig, setProjectUiSettings } from "../lib/project-config";
 import { openSchemaEditorModal } from "./schema-editor-modal";
 import { appState } from "../state";
-import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 
 export type SettingsHandlers = {
   onClose: () => void;
   onSchemaChanged: () => void;
-  onSetFieldHidden: (
-    fieldKey: string,
-    hidden: boolean,
-    schema?: DatasetSchemaDefinition,
-  ) => Promise<void>;
   onRerender: () => void;
 };
 
@@ -37,11 +27,6 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
   dialog.setAttribute("aria-label", "Einstellungen");
 
   const s = getWebDavSettings();
-  const selectedScan = appState.selectedLocId
-    ? appState.scans.find(
-        (sc) => sc.meta.locId === appState.selectedLocId || sc.locId === appState.selectedLocId,
-      )
-    : undefined;
 
   dialog.innerHTML = `
     <h2>Einstellungen</h2>
@@ -67,12 +52,6 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
         <button type="button" class="btn" data-action="edit-detail">Detail</button>
         <button type="button" class="btn" data-action="edit-excel">Excel</button>
         <button type="button" class="btn" data-action="edit-export">PDF &amp; HTML</button>
-      </div>
-
-      <div class="settings-subsection" data-dataset-row hidden>
-        <h4 class="settings-subhead">Ausgewählter Datensatz</h4>
-        <p class="muted settings-hint" data-dataset-hint hidden></p>
-        <button type="button" class="btn" data-action="edit-dataset">Felder ein-/ausblenden…</button>
       </div>
     </section>
 
@@ -105,15 +84,6 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
   const prefixHint = dialog.querySelector<HTMLElement>("#schema-prefix-hint");
   if (prefixHint) prefixHint.textContent = `${getLoxIdPrefix()}-XXXX-XXXX`;
 
-  const datasetRow = dialog.querySelector<HTMLElement>("[data-dataset-row]")!;
-  const datasetHint = dialog.querySelector<HTMLElement>("[data-dataset-hint]")!;
-  if (selectedScan && appState.ready) {
-    datasetRow.hidden = false;
-    const bez = selectedScan.meta.bezeichnung.trim() || selectedScan.meta.locId;
-    datasetHint.hidden = false;
-    datasetHint.textContent = `„${bez}“`;
-  }
-
   const baseUrl = dialog.querySelector<HTMLInputElement>('input[name="baseUrl"]')!;
   const username = dialog.querySelector<HTMLInputElement>('input[name="username"]')!;
   const password = dialog.querySelector<HTMLInputElement>('input[name="password"]')!;
@@ -130,26 +100,10 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
 
   const schemaIdFromListSelect = () => activeListSchemaId(appState.listViewSchemaId);
 
-  const openEditor = (initialTab: "liste" | "excel" | "detail" | "export", withDataset: boolean) => {
-    const schemaId = withDataset && selectedScan
-      ? resolveSchemaForDataset(selectedScan.meta).id
-      : schemaIdFromListSelect();
+  const openEditor = (initialTab: "liste" | "excel" | "detail" | "export") => {
     backdrop.remove();
     handlers.onClose();
-    openSchemaEditorModal(schemaId, handlers.onRerender, {
-      initialTab: withDataset ? "detail" : initialTab,
-      datasetContext:
-        withDataset && selectedScan
-          ? {
-              locId: selectedScan.meta.locId,
-              getMeta: () =>
-                appState.scans.find((sc) => sc.meta.locId === selectedScan.meta.locId)?.meta,
-              onSetFieldHidden: (fieldKey, hidden, schema) =>
-                handlers.onSetFieldHidden(fieldKey, hidden, schema),
-              onRerender: handlers.onRerender,
-            }
-          : undefined,
-    });
+    openSchemaEditorModal(schemaIdFromListSelect(), handlers.onRerender, { initialTab });
   };
 
   const showObsoleteCb = dialog.querySelector<HTMLInputElement>("[data-show-obsolete]")!;
@@ -162,24 +116,19 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
   });
 
   dialog.querySelector('[data-action="edit-liste"]')?.addEventListener("click", () => {
-    openEditor("liste", false);
+    openEditor("liste");
   });
 
   dialog.querySelector('[data-action="edit-detail"]')?.addEventListener("click", () => {
-    openEditor("detail", false);
+    openEditor("detail");
   });
 
   dialog.querySelector('[data-action="edit-excel"]')?.addEventListener("click", () => {
-    openEditor("excel", false);
+    openEditor("excel");
   });
 
   dialog.querySelector('[data-action="edit-export"]')?.addEventListener("click", () => {
-    openEditor("export", false);
-  });
-
-  dialog.querySelector('[data-action="edit-dataset"]')?.addEventListener("click", () => {
-    if (!selectedScan) return;
-    openEditor("detail", true);
+    openEditor("export");
   });
 
   dialog.querySelector('[data-action="close"]')?.addEventListener("click", () => close());

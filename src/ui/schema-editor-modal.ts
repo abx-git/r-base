@@ -1,7 +1,6 @@
 import { prepareSchemaEditorDraft } from "../lib/field-placement-editor";
 import { getSchemaById, upsertSchemaDefinition } from "../lib/dataset-schema-store";
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
-import type { DatasetMeta } from "../lib/meta-schema";
 import { renderDetailformular } from "./schema-editor-detail";
 import { renderExportformular } from "./schema-editor-export";
 import { renderFeldkatalog } from "./schema-editor-felder";
@@ -22,16 +21,6 @@ import {
 
 export type SchemaEditorOpenOptions = {
   initialTab?: SchemaEditorInitialTab;
-  datasetContext?: {
-    locId: string;
-    getMeta: () => DatasetMeta | undefined;
-    onSetFieldHidden: (
-      fieldKey: string,
-      hidden: boolean,
-      schema: DatasetSchemaDefinition,
-    ) => Promise<void>;
-    onRerender: () => void;
-  };
 };
 
 export function openSchemaEditorModal(
@@ -45,7 +34,7 @@ export function openSchemaEditorModal(
   let original = structuredClone(existing);
   let draft = structuredClone(existing);
   prepareSchemaEditorDraft(draft);
-  let tab: SchemaEditorTabId = mapInitialTab(options?.initialTab, Boolean(options?.datasetContext));
+  let tab: SchemaEditorTabId = mapInitialTab(options?.initialTab);
 
   const shell = createSchemaEditorShell();
   attachDirtyCheck(shell, () => isDraftDirty(original, draft));
@@ -94,7 +83,6 @@ export function openSchemaEditorModal(
       case "detail":
         renderDetailformular(parent, {
           draft,
-          datasetContext: options?.datasetContext,
           rerender: renderBody,
         });
         break;

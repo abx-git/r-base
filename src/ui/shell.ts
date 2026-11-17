@@ -388,7 +388,7 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
       pickLabel.textContent = "Schema";
       const select = el("select", "field chrome-schema-select");
       select.name = "headerListSchema";
-      select.title = "Tabellenspalten und neuer Datensatz";
+      select.title = "Liste, Spalten und neuer Datensatz — nur Datensätze dieses Schemas";
       select.disabled = !appState.ready;
       for (const schema of schemas) {
         const opt = el("option");
@@ -417,6 +417,7 @@ function currentRecordFilter(): RecordFilterState {
     query: appState.filterQuery,
     tagRules: appState.filterTagRules,
     columnFilters: appState.tableColumnFilters,
+    listSchemaId: appState.ready ? activeListSchemaId(appState.listViewSchemaId) : undefined,
   });
 }
 
@@ -496,18 +497,6 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   });
 
   const hasFilter = hasActiveRecordFilter(currentRecordFilter());
-  const resetBtn = el("button", "btn");
-  resetBtn.type = "button";
-  resetBtn.textContent = "Filter zurücksetzen";
-  resetBtn.disabled = !hasFilter;
-  resetBtn.addEventListener("click", () => {
-    patchState({
-      filterQuery: "",
-      filterTagRules: [],
-      tableColumnFilters: {},
-      tableSelection: [],
-    });
-  });
 
   const newBtn = el("button", "btn btn-primary");
   newBtn.type = "button";
@@ -519,9 +508,26 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   }
   newBtn.addEventListener("click", () => void handlers.onNewDataset());
 
+  const newWrap = el("div", "sidebar-new-dataset");
+  newWrap.append(newBtn);
+
   aside.append(search);
   renderSidebarTagFilter(aside);
-  aside.append(resetBtn, newBtn);
+  if (hasFilter) {
+    const resetBtn = el("button", "btn sidebar-reset-filter");
+    resetBtn.type = "button";
+    resetBtn.textContent = "Filter zurücksetzen";
+    resetBtn.addEventListener("click", () => {
+      patchState({
+        filterQuery: "",
+        filterTagRules: [],
+        tableColumnFilters: {},
+        tableSelection: [],
+      });
+    });
+    aside.append(resetBtn);
+  }
+  aside.append(newWrap);
   root.append(aside);
 }
 
@@ -1371,40 +1377,59 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
   const hasFilter = hasActiveRecordFilter(currentRecordFilter());
 
   const toolbar = el("div", "detail-toolbar");
-  const back = el("button", "btn");
+  const toolbarStart = el("div", "detail-toolbar-start");
+  const toolbarEnd = el("div", "detail-toolbar-end");
+
+  const back = el("button", "btn detail-toolbar-back");
   back.type = "button";
-  back.textContent = "← Tabelle";
+  back.textContent = "← Liste";
+  back.title = "Zurück zur Tabelle (Esc)";
   back.addEventListener("click", () => {
     patchState({ view: "table" });
   });
 
-  const prev = el("button", "btn");
+  const nav = el("div", "detail-toolbar-nav");
+  nav.setAttribute("role", "group");
+  nav.setAttribute("aria-label", "Datensatz-Navigation");
+
+  const navHint = hasFilter ? "innerhalb der aktiven Filter" : "in der aktuellen Liste";
+  const canStep = rows.length > 1 && index >= 0;
+
+  const prev = el("button", "btn detail-nav-btn");
   prev.type = "button";
-  prev.textContent = "◀ Vorheriger";
-  prev.disabled = rows.length <= 1;
-  prev.title = hasFilter ? "Vorheriger Datensatz (aktuelle Suche/Filter)" : "Vorheriger Datensatz";
+  prev.textContent = "‹";
+  prev.setAttribute("aria-label", "Vorheriger Datensatz");
+  prev.disabled = !canStep || index <= 0;
+  prev.title = canStep ? `Vorheriger (${navHint})` : "Kein weiterer Datensatz";
   prev.addEventListener("click", () => navigateFilteredDetail(-1));
 
-  const next = el("button", "btn");
+  const status = el("span", "detail-nav-status");
+  if (!rows.length) {
+    status.textContent = "Keine Treffer";
+    status.classList.add("muted");
+  } else if (index >= 0) {
+    status.textContent = `${index + 1} / ${rows.length}`;
+    status.title = hasFilter ? "Position in der gefilterten Liste" : "Position in der Liste";
+  } else {
+    status.textContent = "— / " + String(rows.length);
+    status.classList.add("muted");
+    status.title = "Datensatz nicht in der aktuellen Liste sichtbar";
+  }
+
+  const next = el("button", "btn detail-nav-btn");
   next.type = "button";
-  next.textContent = "Nächster ▶";
-  next.disabled = rows.length <= 1;
-  next.title = hasFilter ? "Nächster Datensatz (aktuelle Suche/Filter)" : "Nächster Datensatz";
+  next.textContent = "›";
+  next.setAttribute("aria-label", "Nächster Datensatz");
+  next.disabled = !canStep || index >= rows.length - 1;
+  next.title = canStep ? `Nächster (${navHint})` : "Kein weiterer Datensatz";
   next.addEventListener("click", () => navigateFilteredDetail(1));
 
-  const status = el("span", "detail-nav-status muted");
-  if (!rows.length) {
-    status.textContent = "Keine Treffer für aktuelle Filter";
-  } else if (index >= 0) {
-    status.textContent = `${index + 1} / ${rows.length}${hasFilter ? " (Filter)" : ""}`;
-  } else {
-    status.textContent = `Nicht in der Liste (${rows.length} Treffer${hasFilter ? ", Filter aktiv" : ""})`;
-  }
+  nav.append(prev, status, next);
 
   const delDs = el("button", "btn btn-danger detail-delete");
   delDs.type = "button";
-  delDs.textContent = "Datensatz löschen…";
-  delDs.title = "Verschiebt den Ordner nach deleted/ (Strg+Z zum Zurückholen)";
+  delDs.textContent = "Löschen…";
+  delDs.title = "Nach deleted/ verschieben (Strg+Z / ⌘Z zum Zurückholen)";
   delDs.disabled = !appState.ready;
   delDs.addEventListener("click", () => {
     const label = displayLocId(scan.meta.locId);
@@ -1420,7 +1445,9 @@ function renderDetail(main: HTMLElement, handlers: ShellHandlers): void {
     void handlers.onSoftDeleteDataset();
   });
 
-  toolbar.append(back, prev, status, next, delDs);
+  toolbarStart.append(back);
+  toolbarEnd.append(delDs);
+  toolbar.append(toolbarStart, nav, toolbarEnd);
   main.append(toolbar);
 
   const schema = resolveSchemaForDataset(scan.meta);
@@ -1470,8 +1497,12 @@ function renderBanner(root: HTMLElement, text: string, variant: "error" | "ok"):
 }
 
 function renderMessages(root: HTMLElement): void {
-  if (appState.error) renderBanner(root, appState.error, "error");
-  if (appState.message) renderBanner(root, appState.message, "ok");
+  if (!appState.error && !appState.message) return;
+  const stack = el("div", "banner-stack");
+  stack.setAttribute("aria-live", "polite");
+  if (appState.error) renderBanner(stack, appState.error, "error");
+  if (appState.message) renderBanner(stack, appState.message, "ok");
+  root.append(stack);
 }
 
 export type ShellHandlers = {
