@@ -66,6 +66,10 @@ export type DatasetSchemaDefinition = {
   hiddenTableColumnKeys?: string[];
   /** Optionale Detailfelder, die neu/importiert standardmäßig ausgeblendet sind */
   defaultHiddenDetailFieldKeys?: string[];
+  /** PDF-Export: Layout (Container / Felder / Dateien) */
+  exportLayout?: LayoutRow[];
+  /** Optionale Exportfelder, die standardmäßig ausgeblendet sind */
+  defaultHiddenExportFieldKeys?: string[];
   /** Mitgeliefert, nicht löschbar */
   builtin?: boolean;
 };

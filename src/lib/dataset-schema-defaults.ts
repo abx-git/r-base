@@ -35,6 +35,25 @@ export const DEFAULT_RUD_SCHEMA: DatasetSchemaDefinition = {
       ],
     },
   ],
+  exportLayout: [
+    {
+      id: "row-export",
+      containers: [
+        {
+          id: "container-meta",
+          title: "",
+          colSpan: 6,
+          fieldKeys: ["locId", "bezeichnung", "kategorie", "notes", "tags"],
+        },
+        {
+          id: FILES_LAYOUT_CONTAINER_ID,
+          title: "Bilder",
+          colSpan: 6,
+          fieldKeys: [],
+        },
+      ],
+    },
+  ],
   tableColumns: [
     { fieldKey: "locId", label: "ID", source: "meta", width: "10rem" },
     { fieldKey: "bezeichnung", label: "Bezeichnung", source: "meta" },

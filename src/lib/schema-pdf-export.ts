@@ -1,17 +1,18 @@
 import type { DatasetScan } from "./fs-local";
+import { isImagePath, readFileAtPath } from "./fs-local";
 import type { DatasetSchemaDefinition, SchemaFieldDef } from "./dataset-schema-types";
 import { resolveSchemaForDataset } from "./dataset-schema-store";
-import { getDetailFieldOrder } from "./field-placement-editor";
+import { exportBlocksForSchema } from "./export-placement-editor";
+import { isExportFieldVisibleInSchema } from "./export-field-visibility";
 import { fieldDefByKey, formatFieldForInput, getMetaFieldValue } from "./meta-field-access";
 import { displayLocId } from "./meta-schema";
-import { resolveDetailHiddenKeys } from "./meta-hidden-fields";
 import { formatObsoleteValue, listObsoleteFields } from "./meta-obsolete-fields";
 
 export type SchemaPdfExportOptions = {
-  /** Leere optionale Felder weglassen (Standard: an). */
   omitEmptyOptional?: boolean;
-  /** Deckblatt mit Schema-Übersicht (Standard: an). */
   includeCover?: boolean;
+  /** Felder außerhalb des Schemas ans Ende (Standard: an). */
+  includeObsolete?: boolean;
 };
 
 const PAGE_W = 210;
@@ -73,21 +74,46 @@ function isEmptyValue(text: string): boolean {
   return !t || t === "—";
 }
 
-function fieldKeysForExport(
+function filterExportKeys(
   schema: DatasetSchemaDefinition,
   meta: DatasetScan["meta"],
-  omitEmptyOptional: boolean,
+  keys: string[],
+  omitEmpty: boolean,
 ): string[] {
-  const hidden = resolveDetailHiddenKeys(meta, schema);
-  const order = getDetailFieldOrder(schema);
-  const keys = order.filter((k) => !hidden.has(k));
-  if (!omitEmptyOptional) return keys;
   return keys.filter((key) => {
+    if (!isExportFieldVisibleInSchema(schema, key)) return false;
+    if (!omitEmpty) return true;
     const def = fieldDefByKey(schema.fields, key);
     const text = formatFieldValue(def, meta, key);
     if (!def) return !isEmptyValue(text);
     if (def.constraints?.required || def.key === "locId" || def.key === "bezeichnung") return true;
     return !isEmptyValue(text);
+  });
+}
+
+type ImagePayload = { dataUrl: string; format: "JPEG" | "PNG"; w: number; h: number };
+
+async function loadImagePayload(scan: DatasetScan, path: string): Promise<ImagePayload | null> {
+  const file = await readFileAtPath(scan.handle, path);
+  if (!file) return null;
+  const mime = (file.type || "").toLowerCase();
+  if (!mime.startsWith("image/") && !isImagePath(path)) return null;
+  const format: "JPEG" | "PNG" = mime.includes("png") || path.toLowerCase().endsWith(".png") ? "PNG" : "JPEG";
+  const buf = await file.arrayBuffer();
+  const u8 = new Uint8Array(buf);
+  let bin = "";
+  for (const b of u8) bin += String.fromCharCode(b);
+  const dataUrl = `data:${mime || "image/jpeg"};base64,${btoa(bin)}`;
+  const dims = await measureImage(dataUrl);
+  return { dataUrl, format, w: dims.w, h: dims.h };
+}
+
+function measureImage(dataUrl: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => reject(new Error("Bild konnte nicht gelesen werden"));
+    img.src = dataUrl;
   });
 }
 
@@ -99,11 +125,14 @@ export async function buildSchemaPdf(
   const { jsPDF } = await import("jspdf");
   const omitEmpty = options.omitEmptyOptional !== false;
   const includeCover = options.includeCover !== false;
+  const includeObsolete = options.includeObsolete !== false;
   const datasets = scansForSchema(scans, schema);
   const exportStamp = new Date().toLocaleString("de-DE");
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
 
   let pageNum = 0;
+  let y = MARGIN;
+  let sheetFooter = schema.name;
 
   const setInk = () => doc.setTextColor(...THEME.ink);
   const setMuted = () => doc.setTextColor(...THEME.muted);
@@ -125,12 +154,46 @@ export async function buildSchemaPdf(
   const newPage = (footerContext: string) => {
     if (pageNum > 0) doc.addPage();
     pageNum += 1;
+    sheetFooter = footerContext;
     drawFooter(footerContext);
     return MARGIN;
   };
 
-  let y = MARGIN;
-  let sheetFooter = schema.name;
+  const ensureSpace = (need: number) => {
+    if (y + need <= BODY_BOTTOM) return;
+    y = newPage(sheetFooter);
+  };
+
+  const drawFieldRow = (label: string, value: string, mono = false) => {
+    const valueLines = doc.splitTextToSize(value, CONTENT_W - 48);
+    const rowH = Math.max(7, valueLines.length * 4.2 + 3);
+    ensureSpace(rowH + 2);
+
+    setMuted();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(label.toUpperCase(), MARGIN, y + 3);
+
+    setInk();
+    doc.setFont(mono ? "courier" : "helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(valueLines, MARGIN + 48, y + 3.5);
+
+    doc.setDrawColor(...THEME.line);
+    doc.setLineWidth(0.12);
+    doc.line(MARGIN, y + rowH, PAGE_W - MARGIN, y + rowH);
+    y += rowH + 1.5;
+  };
+
+  const drawSectionTitle = (title: string) => {
+    ensureSpace(10);
+    setAccent();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text(title, MARGIN, y);
+    y += 6;
+    setInk();
+  };
 
   if (includeCover) {
     y = newPage(schema.name);
@@ -157,9 +220,10 @@ export async function buildSchemaPdf(
     doc.setFontSize(10);
     doc.text(`${datasets.length} Datensätze`, MARGIN, MARGIN + 48);
     doc.text(`Export: ${exportStamp}`, MARGIN, MARGIN + 56);
+    doc.text("Layout: Exportformular", MARGIN, MARGIN + 64);
 
     if (datasets.length) {
-      y = MARGIN + 72;
+      y = MARGIN + 76;
       doc.setFontSize(8);
       doc.setFont("helvetica", "bold");
       setAccent();
@@ -167,46 +231,15 @@ export async function buildSchemaPdf(
       y += 5;
       doc.setFont("helvetica", "normal");
       setMuted();
-      const preview = datasets.slice(0, 12);
-      for (const s of preview) {
+      for (const s of datasets.slice(0, 12)) {
         const line = `${displayLocId(s.meta.locId)}  ·  ${s.meta.bezeichnung.trim() || "—"}`;
         const parts = doc.splitTextToSize(line, CONTENT_W);
         doc.text(parts, MARGIN, y);
         y += parts.length * 3.6 + 1.5;
         if (y > BODY_BOTTOM - 20) break;
       }
-      if (datasets.length > preview.length) {
-        doc.text(`… und ${datasets.length - preview.length} weitere`, MARGIN, y + 2);
-      }
     }
-
   }
-
-  const ensureSpace = (need: number): void => {
-    if (y + need <= BODY_BOTTOM) return;
-    y = newPage(sheetFooter);
-  };
-
-  const drawFieldRow = (label: string, value: string, mono = false) => {
-    const valueLines = doc.splitTextToSize(value, CONTENT_W - 48);
-    const rowH = Math.max(7, valueLines.length * 4.2 + 3);
-    ensureSpace(rowH + 2);
-
-    setMuted();
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.text(label.toUpperCase(), MARGIN, y + 3);
-
-    setInk();
-    doc.setFont(mono ? "courier" : "helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(valueLines, MARGIN + 48, y + 3.5);
-
-    doc.setDrawColor(...THEME.line);
-    doc.setLineWidth(0.12);
-    doc.line(MARGIN, y + rowH, PAGE_W - MARGIN, y + rowH);
-    y += rowH + 1.5;
-  };
 
   if (!datasets.length) {
     if (!includeCover) y = newPage(schema.name);
@@ -217,20 +250,14 @@ export async function buildSchemaPdf(
     return doc.output("blob");
   }
 
+  const blocks = exportBlocksForSchema(schema);
+
   for (const scan of datasets) {
     const meta = scan.meta;
     const title = meta.bezeichnung.trim() || "Ohne Bezeichnung";
     const locLabel = displayLocId(meta.locId);
     sheetFooter = locLabel;
     y = newPage(locLabel);
-
-    const subtitleParts = [
-      meta.kategorie.trim() || null,
-      meta.files.length ? `${meta.files.length} Datei${meta.files.length === 1 ? "" : "en"}` : null,
-      meta.lastModified
-        ? `Stand ${new Date(meta.lastModified).toLocaleDateString("de-DE")}`
-        : null,
-    ].filter(Boolean) as string[];
 
     setMuted();
     doc.setFont("helvetica", "normal");
@@ -249,40 +276,95 @@ export async function buildSchemaPdf(
     doc.setFontSize(17);
     const titleLines = doc.splitTextToSize(title, CONTENT_W);
     doc.text(titleLines, MARGIN, y);
-    y += titleLines.length * 7.2 + 2;
+    y += titleLines.length * 7.2 + 4;
 
-    if (subtitleParts.length) {
-      setMuted();
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.text(subtitleParts.join("  ·  "), MARGIN, y);
-      y += 8;
-    }
+    for (const block of blocks) {
+      if (block.kind === "fields") {
+        const keys = filterExportKeys(schema, meta, block.fieldKeys, omitEmpty);
+        if (!keys.length) continue;
+        if (block.title?.trim()) drawSectionTitle(block.title.trim());
+        for (const key of keys) {
+          if (key === "bezeichnung") continue;
+          const def = fieldDefByKey(schema.fields, key);
+          drawFieldRow(def?.label ?? key, formatFieldValue(def, meta, key), key === "locId");
+        }
+      } else if (block.kind === "unplaced") {
+        const keys = filterExportKeys(schema, meta, block.fieldKeys, omitEmpty);
+        if (!keys.length) continue;
+        drawSectionTitle("Nicht platziert");
+        for (const key of keys) {
+          const def = fieldDefByKey(schema.fields, key);
+          drawFieldRow(def?.label ?? key, formatFieldValue(def, meta, key), key === "locId");
+        }
+      } else if (block.kind === "files") {
+        const images = meta.files.filter((f) => isImagePath(f.path));
+        if (!images.length) continue;
+        if (block.title?.trim()) drawSectionTitle(block.title.trim());
+        else drawSectionTitle("Bilder");
 
-    y += 2;
+        const cols = (block.colSpan ?? 12) >= 8 ? 3 : 2;
+        const gap = 3;
+        const cellW = (CONTENT_W - gap * (cols - 1)) / cols;
+        const maxCellH = 52;
+        let col = 0;
+        let rowY = y;
+        let rowMaxH = 0;
 
-    for (const key of fieldKeysForExport(schema, meta, omitEmpty)) {
-      const def = fieldDefByKey(schema.fields, key);
-      const label = def?.label ?? key;
-      const value = formatFieldValue(def, meta, key);
-      drawFieldRow(label, value, key === "locId");
-    }
+        for (const ref of images) {
+          let payload: ImagePayload | null = null;
+          try {
+            payload = await loadImagePayload(scan, ref.path);
+          } catch {
+            payload = null;
+          }
+          if (!payload) continue;
 
-    const obsolete = listObsoleteFields(meta, schema).filter((e) => !isEmptyValue(formatObsoleteValue(e.value)));
-    if (obsolete.length) {
-      ensureSpace(14);
-      y += 4;
-      setAccent();
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.text("Außerhalb des Schemas", MARGIN, y);
-      y += 6;
-      for (const entry of obsolete) {
-        drawFieldRow(entry.key, formatObsoleteValue(entry.value));
+          const scale = Math.min(cellW / payload.w, maxCellH / payload.h, 1);
+          const drawW = payload.w * scale;
+          const drawH = payload.h * scale;
+          if (col === 0) {
+            ensureSpace(maxCellH + 14);
+            rowY = y;
+            rowMaxH = 0;
+          }
+
+          const x = MARGIN + col * (cellW + gap) + (cellW - drawW) / 2;
+          const imgY = rowY + 2;
+          doc.addImage(payload.dataUrl, payload.format, x, imgY, drawW, drawH);
+
+          setMuted();
+          doc.setFontSize(6.5);
+          const caption = ref.path.split("/").pop() ?? ref.path;
+          doc.text(caption.slice(0, 28), MARGIN + col * (cellW + gap), rowY + drawH + 6, {
+            maxWidth: cellW,
+          });
+          setInk();
+
+          rowMaxH = Math.max(rowMaxH, drawH + 8);
+          col += 1;
+          if (col >= cols) {
+            y = rowY + rowMaxH + 4;
+            col = 0;
+            rowMaxH = 0;
+          }
+        }
+        if (col > 0) y = rowY + rowMaxH + 4;
+        y += 2;
       }
     }
 
-    y += 6;
+    if (includeObsolete) {
+      const obsolete = listObsoleteFields(meta, schema).filter((e) => !isEmptyValue(formatObsoleteValue(e.value)));
+      if (obsolete.length) {
+        ensureSpace(14);
+        drawSectionTitle("Außerhalb des Schemas");
+        for (const entry of obsolete) {
+          drawFieldRow(entry.key, formatObsoleteValue(entry.value));
+        }
+      }
+    }
+
+    y += 4;
   }
 
   return doc.output("blob");

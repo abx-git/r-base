@@ -1,6 +1,7 @@
 import type { DatasetSchemaDefinition, SystemSchemaConfig, TableColumnDef } from "./dataset-schema-types";
 import { DEFAULT_RUD_SCHEMA } from "./dataset-schema-defaults";
 import { ensureFilesLayoutContainer, isFilesLayoutContainer } from "./detail-layout";
+import { ensureExportLayoutInitialized, ensureFilesInExportLayout } from "./export-layout";
 import {
   inferColumnSource,
   isTableColumnHidden,
@@ -147,8 +148,17 @@ export function repairSchemaDefinition(schema: DatasetSchemaDefinition): Dataset
     if (!next.defaultHiddenDetailFieldKeys.length) delete next.defaultHiddenDetailFieldKeys;
   }
 
+  if (next.defaultHiddenExportFieldKeys?.length) {
+    next.defaultHiddenExportFieldKeys = next.defaultHiddenExportFieldKeys.filter(
+      (k) => !PROTECTED_DETAIL_FIELD_KEYS.has(k),
+    );
+    if (!next.defaultHiddenExportFieldKeys.length) delete next.defaultHiddenExportFieldKeys;
+  }
+
   ensureMetaDetailLayout(next);
   ensureFilesLayoutContainer(next);
+  ensureExportLayoutInitialized(next);
+  ensureFilesInExportLayout(next);
 
   if (!next.layout.length) next.layout = structuredClone(defaults.layout);
 

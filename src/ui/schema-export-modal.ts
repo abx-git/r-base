@@ -26,7 +26,7 @@ export function openSchemaPdfExportModal(
   const intro = document.createElement("p");
   intro.className = "muted";
   intro.textContent =
-    "Erzeugt ein PDF mit einem minimalistischen Datenblatt pro Datensatz (Felder laut Detail-Schema und Sichtbarkeit).";
+    "Erzeugt ein PDF mit einem Datenblatt pro Datensatz — Layout und Bilder laut Tab „Exportformular“ im Schema-Editor.";
 
   const schemaLabel = document.createElement("label");
   schemaLabel.className = "schema-export-row";

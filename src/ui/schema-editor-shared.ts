@@ -7,9 +7,11 @@ import type {
 } from "../lib/dataset-schema-types";
 import { isFilesLayoutContainer } from "../lib/detail-layout";
 import { isDetailFieldVisibleInSchema } from "../lib/detail-field-visibility";
+import { isExportFieldVisibleInSchema } from "../lib/export-field-visibility";
+import { consolidateExportLayout, ensureExportLayoutRow, findExportContainer } from "../lib/export-layout";
 import { validateSchemaDefinition } from "../lib/schema-validation";
 
-export type SchemaEditorTabId = "stammdaten" | "felder" | "liste" | "detail";
+export type SchemaEditorTabId = "stammdaten" | "felder" | "liste" | "detail" | "export";
 
 /** Legacy + neue Tab-IDs aus Aufrufern */
 export type SchemaEditorInitialTab =
@@ -29,6 +31,7 @@ export const SCHEMA_EDITOR_TABS: {
   { id: "felder", label: "Feldkatalog", description: "Felder anlegen: Label, Typ, Pflicht" },
   { id: "liste", label: "Listenansicht", description: "Tabellen-Spalten & Reihenfolge" },
   { id: "detail", label: "Detailformular", description: "Detail-Sichtbarkeit & Layout" },
+  { id: "export", label: "Exportformular", description: "PDF-Export: Felder, Anordnung & Bilder" },
 ];
 
 export function mapInitialTab(
@@ -41,7 +44,7 @@ export function mapInitialTab(
     return hasDatasetContext ? "detail" : "liste";
   }
   if (raw === "layout") return "detail";
-  if (raw === "stammdaten" || raw === "felder" || raw === "liste" || raw === "detail") return raw;
+  if (raw === "stammdaten" || raw === "felder" || raw === "liste" || raw === "detail" || raw === "export") return raw;
   return "stammdaten";
 }
 
@@ -115,7 +118,20 @@ export function moveTableCol(draft: DatasetSchemaDefinition, idx: number, delta:
 
 export function purgeFieldFromLayout(draft: DatasetSchemaDefinition, key: string): void {
   removeFieldFromAllContainers(draft, key);
+  removeFieldFromAllExportContainers(draft, key);
 }
+
+export function removeFieldFromAllExportContainers(draft: DatasetSchemaDefinition, key: string): void {
+  consolidateExportLayout(draft);
+  for (const row of draft.exportLayout ?? []) {
+    for (const c of row.containers ?? []) {
+      if (isFilesLayoutContainer(c)) continue;
+      c.fieldKeys = (c.fieldKeys ?? []).filter((k) => k !== key);
+    }
+  }
+}
+
+export { consolidateExportLayout, ensureExportLayoutRow };
 
 export function purgeFieldFromTable(draft: DatasetSchemaDefinition, key: string): void {
   draft.tableColumns = draft.tableColumns.filter((c) => c.fieldKey !== key);
@@ -128,6 +144,10 @@ export function purgeFieldFromTable(draft: DatasetSchemaDefinition, key: string)
   if (draft.defaultHiddenDetailFieldKeys?.length) {
     draft.defaultHiddenDetailFieldKeys = draft.defaultHiddenDetailFieldKeys.filter((k) => k !== key);
     if (!draft.defaultHiddenDetailFieldKeys.length) delete draft.defaultHiddenDetailFieldKeys;
+  }
+  if (draft.defaultHiddenExportFieldKeys?.length) {
+    draft.defaultHiddenExportFieldKeys = draft.defaultHiddenExportFieldKeys.filter((k) => k !== key);
+    if (!draft.defaultHiddenExportFieldKeys.length) delete draft.defaultHiddenExportFieldKeys;
   }
 }
 
@@ -189,6 +209,7 @@ export function moveFieldInContainer(container: LayoutContainer, fieldKey: strin
 
 /** Drop-Ziel für Felder ohne Container-Zuordnung (nur im Schema-Editor). */
 export const DETAIL_UNPLACED_DROP_ID = "__unplaced__";
+export const EXPORT_UNPLACED_DROP_ID = "__export_unplaced__";
 
 export function fieldChip(key: string, draft: DatasetSchemaDefinition): HTMLElement {
   const chip = document.createElement("span");
@@ -202,6 +223,35 @@ export function fieldChip(key: string, draft: DatasetSchemaDefinition): HTMLElem
     e.dataTransfer!.effectAllowed = "move";
   });
   return chip;
+}
+
+export function enableExportDrop(
+  zone: HTMLElement,
+  draft: DatasetSchemaDefinition,
+  rerender: () => void,
+): void {
+  zone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    zone.classList.add("is-over");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("is-over"));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("is-over");
+    const key = e.dataTransfer?.getData("text/field-key");
+    if (!key) return;
+    removeFieldFromAllExportContainers(draft, key);
+    const targetId = zone.dataset.containerId;
+    if (targetId === EXPORT_UNPLACED_DROP_ID) {
+      rerender();
+      return;
+    }
+    const container = findExportContainer(draft, targetId ?? "");
+    if (!container || isFilesLayoutContainer(container)) return;
+    if (!isExportFieldVisibleInSchema(draft, key)) return;
+    if (!container.fieldKeys.includes(key)) container.fieldKeys.push(key);
+    rerender();
+  });
 }
 
 export function enableDrop(

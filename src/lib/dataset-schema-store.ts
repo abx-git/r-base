@@ -123,6 +123,21 @@ function normalizeSchema(schema: DatasetSchemaDefinition): DatasetSchemaDefiniti
     ...(repaired.defaultHiddenDetailFieldKeys?.length
       ? { defaultHiddenDetailFieldKeys: [...repaired.defaultHiddenDetailFieldKeys] }
       : {}),
+    ...(repaired.exportLayout?.length
+      ? {
+          exportLayout: repaired.exportLayout.map((row) => ({
+            ...row,
+            containers: (row.containers ?? []).map((c) => ({
+              ...c,
+              colSpan: colSpan(c.colSpan),
+              fieldKeys: [...(c.fieldKeys ?? [])],
+            })),
+          })),
+        }
+      : {}),
+    ...(repaired.defaultHiddenExportFieldKeys?.length
+      ? { defaultHiddenExportFieldKeys: [...repaired.defaultHiddenExportFieldKeys] }
+      : {}),
   };
 }
 

@@ -1,5 +1,6 @@
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 import { setSchemaDetailFieldVisible, isDetailFieldVisibleInSchema } from "../lib/detail-field-visibility";
+import { isExportFieldVisibleInSchema, setSchemaExportFieldVisible } from "../lib/export-field-visibility";
 import {
   isTablePlacementProtected,
   tableColumnAt,
@@ -14,7 +15,7 @@ import {
 } from "../lib/table-layout";
 import { hint, mkBtn, moveTableCol, toggleSwitch } from "./schema-editor-shared";
 
-export type PlacementListMode = "liste" | "detail";
+export type PlacementListMode = "liste" | "detail" | "export";
 
 export type PlacementListContext = {
   mode: PlacementListMode;
@@ -26,6 +27,7 @@ export type PlacementListContext = {
 const VIS_LABEL: Record<PlacementListMode, string> = {
   liste: "In Tabelle",
   detail: "Im Detail",
+  export: "Im Export",
 };
 
 export function renderFieldPlacementList(parent: HTMLElement, ctx: PlacementListContext): void {
@@ -34,6 +36,11 @@ export function renderFieldPlacementList(parent: HTMLElement, ctx: PlacementList
 
   if (mode === "detail") {
     renderDetailVisibilityList(parent, ctx);
+    return;
+  }
+
+  if (mode === "export") {
+    renderExportVisibilityList(parent, ctx);
     return;
   }
 
@@ -101,6 +108,66 @@ export function renderDetailVisibilityList(parent: HTMLElement, ctx: PlacementLi
       visCell.append(
         toggleSwitch(!hidden, `${def.label} im Detail anzeigen`, (visible) => {
           setSchemaDetailFieldVisible(ctx.getDraft(), def.key, visible);
+          ctx.rerender();
+        }),
+      );
+    }
+
+    const spacer = document.createElement("span");
+    row.append(spacer, label, keyBadge, visCell);
+    list.append(row);
+  }
+
+  if (!draft.fields.length) {
+    parent.append(hint("Keine Felder — zuerst im Tab „Feldkatalog“ anlegen."));
+    return;
+  }
+
+  parent.append(list);
+}
+
+/** Feldkatalog: Sichtbarkeit im Schema-PDF-Export. */
+export function renderExportVisibilityList(parent: HTMLElement, ctx: PlacementListContext): void {
+  const draft = ctx.getDraft();
+
+  parent.append(
+    hint(
+      "Welche Felder im PDF-Datenblatt erscheinen. Aktivierte Felder stehen unten unter „Anordnung“ (Container, „Nicht platziert“ oder „Bilder“).",
+    ),
+  );
+
+  const header = document.createElement("div");
+  header.className = "schema-editor-liste-header";
+  header.innerHTML = "<span></span><span>Bezeichnung</span><span>Feld</span><span>Im Export</span>";
+  parent.append(header);
+
+  const list = document.createElement("div");
+  list.className = "schema-editor-liste-rows";
+
+  for (const def of draft.fields) {
+    const hidden = !isExportFieldVisibleInSchema(draft, def.key);
+    const row = document.createElement("div");
+    row.className = "schema-editor-liste-row";
+    if (hidden) row.classList.add("schema-editor-liste-row--hidden");
+
+    const label = document.createElement("span");
+    label.className = "schema-editor-toggle-label";
+    label.textContent = def.label;
+
+    const keyBadge = document.createElement("span");
+    keyBadge.className = "schema-editor-liste-key";
+    keyBadge.textContent = def.key;
+
+    const visCell = document.createElement("div");
+    if (!isOptionalSchemaField(def)) {
+      const tag = document.createElement("span");
+      tag.className = "schema-editor-badge";
+      tag.textContent = "immer sichtbar";
+      visCell.append(tag);
+    } else {
+      visCell.append(
+        toggleSwitch(!hidden, `${def.label} im Export anzeigen`, (visible) => {
+          setSchemaExportFieldVisible(ctx.getDraft(), def.key, visible);
           ctx.rerender();
         }),
       );

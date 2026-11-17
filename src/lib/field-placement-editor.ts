@@ -1,4 +1,5 @@
 import type { DatasetSchemaDefinition, LayoutContainer, LayoutRow, TableColumnDef } from "./dataset-schema-types";
+import { prepareExportLayoutDraft } from "./export-placement-editor";
 import { dedupeLayoutFieldKeys } from "./schema-compat";
 import { isDetailFieldVisibleInSchema } from "./detail-field-visibility";
 import { FILES_LAYOUT_CONTAINER_ID, isFilesLayoutContainer } from "./detail-layout";
@@ -59,6 +60,7 @@ export function prepareSchemaEditorDraft(draft: DatasetSchemaDefinition): void {
   dedupeLayoutFieldKeys(draft);
   pruneInvisibleDetailFieldsFromLayout(draft);
   ensureUnplacedCatalogFieldsInLayout(draft);
+  prepareExportLayoutDraft(draft);
 }
 
 /** Platzhalter — Platzierung nur über „Anordnung“ (Container / „Nicht platziert“). */

@@ -3,6 +3,7 @@ import { getSchemaById, upsertSchemaDefinition } from "../lib/dataset-schema-sto
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 import type { DatasetMeta } from "../lib/meta-schema";
 import { renderDetailformular } from "./schema-editor-detail";
+import { renderExportformular } from "./schema-editor-export";
 import { renderFeldkatalog } from "./schema-editor-felder";
 import { renderListenansicht } from "./schema-editor-liste";
 import { attachDirtyCheck, createSchemaEditorShell } from "./schema-editor-shell";
@@ -13,6 +14,7 @@ import {
   type SchemaEditorInitialTab,
   type SchemaEditorTabId,
   consolidateDetailLayout,
+  consolidateExportLayout,
   validateDraft,
   validationErrorTab,
 } from "./schema-editor-shared";
@@ -86,6 +88,12 @@ export function openSchemaEditorModal(
           rerender: renderBody,
         });
         break;
+      case "export":
+        renderExportformular(parent, {
+          draft,
+          rerender: renderBody,
+        });
+        break;
     }
   };
 
@@ -95,6 +103,7 @@ export function openSchemaEditorModal(
 
   shell.bindSave(() => {
     consolidateDetailLayout(draft);
+    consolidateExportLayout(draft);
     prepareSchemaEditorDraft(draft);
     const err = validateDraft(draft);
     if (err) {

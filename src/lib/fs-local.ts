@@ -77,7 +77,7 @@ async function buildFilesIndex(
   return files;
 }
 
-async function readFileAtPath(folder: FileSystemDirectoryHandle, relativePath: string): Promise<File | null> {
+export async function readFileAtPath(folder: FileSystemDirectoryHandle, relativePath: string): Promise<File | null> {
   try {
     const parts = relativePath.split("/").filter(Boolean);
     let cur = folder;
