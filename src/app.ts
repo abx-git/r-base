@@ -40,7 +40,7 @@ import { setMetaFieldValue } from "./lib/meta-field-access";
 import { normalizeDatasetTags } from "./lib/dataset-tags";
 import type { DatasetSchemaDefinition } from "./lib/dataset-schema-types";
 import {
-  getDefaultSchemaId,
+  activeListSchemaId,
   installSystemSchemaConfig,
   loadSystemSchemaConfig,
   resolveSchemaForDataset,
@@ -281,7 +281,10 @@ export function startApp(container: HTMLElement): void {
         );
         if (tagRaw === null) return;
         const importTag = tagRaw.trim();
-        const targetSchemaId = pickSchemaIdForImport();
+        const targetSchemaId = pickSchemaIdForImport(
+          "Ziel-Schema für CSV-Import",
+          activeListSchemaId(appState.listViewSchemaId),
+        );
         if (targetSchemaId === null) return;
         try {
           const result = await importJuraCsvFile(appState.rootHandle, file, {
@@ -310,9 +313,7 @@ export function startApp(container: HTMLElement): void {
     },
     onNewDataset: async () => {
       if (!appState.rootHandle) return;
-      const preferredSchema = appState.listViewSchemaId ?? getDefaultSchemaId();
-      const schemaId = pickSchemaIdForImport("Schema für neuen Datensatz", preferredSchema);
-      if (schemaId === null) return;
+      const schemaId = activeListSchemaId(appState.listViewSchemaId);
       const scan = await createDataset(
         appState.rootHandle,
         {

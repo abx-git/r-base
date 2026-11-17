@@ -18,10 +18,12 @@ import {
 } from "../lib/meta-schema";
 import { isImagePath } from "../lib/fs-local";
 import {
+  activeListSchemaId,
   resolveSchemaForDataset,
   getDefaultSchema,
   getDefaultSchemaId,
   getSchemaById,
+  loadSystemSchemaConfig,
 } from "../lib/dataset-schema-store";
 import type { DatasetSchemaDefinition, SchemaFieldDef, TableColumnDef } from "../lib/dataset-schema-types";
 import {
@@ -58,6 +60,11 @@ type SidebarFocus = { name: string; start: number | null; end: number | null };
 
 function captureSidebarFocus(): SidebarFocus | null {
   const el = document.activeElement;
+  if (el instanceof HTMLSelectElement && el.name) {
+    if (el.closest(".chrome-sub") || el.closest(".sidebar")) {
+      return { name: el.name, start: null, end: null };
+    }
+  }
   if (!(el instanceof HTMLInputElement) || !el.name) return null;
   if (!el.closest(".sidebar") && !el.closest(".table-col-filter")) return null;
   return { name: el.name, start: el.selectionStart, end: el.selectionEnd };
@@ -65,13 +72,20 @@ function captureSidebarFocus(): SidebarFocus | null {
 
 function restoreSidebarFocus(root: HTMLElement, saved: SidebarFocus | null): void {
   if (!saved) return;
+  const select = root.querySelector<HTMLSelectElement>(`select[name="${CSS.escape(saved.name)}"]`);
+  if (select) {
+    select.focus();
+    return;
+  }
   const input =
     root.querySelector<HTMLInputElement>(`.sidebar input[name="${CSS.escape(saved.name)}"]`) ??
     root.querySelector<HTMLInputElement>(`.table-col-filter input[name="${CSS.escape(saved.name)}"]`);
   if (!input) return;
   input.focus();
   try {
-    input.setSelectionRange(saved.start, saved.end);
+    if (saved.start !== null && saved.end !== null) {
+      input.setSelectionRange(saved.start, saved.end);
+    }
   } catch {
     /* ignore */
   }
@@ -352,11 +366,48 @@ function renderTopBar(root: HTMLElement, handlers: ShellHandlers): void {
   actions.append(folderBtn, syncBtn, menu);
   header.append(title, actions);
 
+  const sub = el("div", "chrome-sub");
+  let subVisible = false;
   if (appState.rootLabel) {
-    const sub = el("div", "chrome-sub");
-    sub.textContent = `Stamm: ${appState.rootLabel}`;
-    header.append(sub);
+    const rootLine = el("span", "chrome-sub-part");
+    rootLine.textContent = `Stamm: ${appState.rootLabel}`;
+    sub.append(rootLine);
+    subVisible = true;
   }
+  if (appState.ready) {
+    const schemas = loadSystemSchemaConfig().schemas;
+    const activeId = activeListSchemaId(appState.listViewSchemaId);
+    if (schemas.length === 1) {
+      const schemaLine = el("span", "chrome-sub-part chrome-sub-schema");
+      schemaLine.textContent = `Schema: ${schemas[0]!.name}`;
+      sub.append(schemaLine);
+      subVisible = true;
+    } else if (schemas.length > 1) {
+      const pick = el("label", "chrome-schema-pick chrome-sub-part");
+      const pickLabel = el("span", "chrome-schema-label");
+      pickLabel.textContent = "Schema";
+      const select = el("select", "field chrome-schema-select");
+      select.name = "headerListSchema";
+      select.title = "Tabellenspalten und neuer Datensatz";
+      select.disabled = !appState.ready;
+      for (const schema of schemas) {
+        const opt = el("option");
+        opt.value = schema.id;
+        opt.textContent = schema.name;
+        if (schema.id === activeId) opt.selected = true;
+        select.append(opt);
+      }
+      select.addEventListener("change", () => {
+        const id = select.value.trim();
+        patchState({ listViewSchemaId: id === getDefaultSchemaId() ? null : id });
+        handlers.onRerender();
+      });
+      pick.append(pickLabel, select);
+      sub.append(pick);
+      subVisible = true;
+    }
+  }
+  if (subVisible) header.append(sub);
 
   root.append(header);
 }
@@ -462,6 +513,10 @@ function renderSidebar(root: HTMLElement, handlers: ShellHandlers): void {
   newBtn.type = "button";
   newBtn.textContent = "+ Neuer Datensatz";
   newBtn.disabled = !appState.ready;
+  if (appState.ready) {
+    const schemaName = getSchemaById(activeListSchemaId(appState.listViewSchemaId))?.name;
+    if (schemaName) newBtn.title = `Neuer Datensatz für Schema „${schemaName}“ (Auswahl in der Kopfzeile)`;
+  }
   newBtn.addEventListener("click", () => void handlers.onNewDataset());
 
   aside.append(search);

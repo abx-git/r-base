@@ -117,8 +117,38 @@
 
 .chrome-sub {
   flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+.chrome-sub-part {
+  flex: 0 1 auto;
+}
+
+.chrome-schema-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  cursor: pointer;
+}
+
+.chrome-schema-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chrome-schema-select {
+  width: auto;
+  min-width: 8.5rem;
+  max-width: min(14rem, 42vw);
+  padding: 0.2rem 0.45rem !important;
+  font-size: 0.78rem !important;
 }
 
 .layout-body {

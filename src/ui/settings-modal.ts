@@ -8,13 +8,13 @@ import { getLoxIdPrefix } from "../lib/id-config";
 import { propfind } from "../lib/webdav-client";
 import { openSystemConfigModal } from "./system-config-modal";
 import {
-  getDefaultSchemaId,
+  activeListSchemaId,
   loadSystemSchemaConfig,
   resolveSchemaForDataset,
 } from "../lib/dataset-schema-store";
 import { getProjectUiSettings, persistCurrentProjectConfig, setProjectUiSettings } from "../lib/project-config";
 import { openSchemaEditorModal } from "./schema-editor-modal";
-import { appState, patchState } from "../state";
+import { appState } from "../state";
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
 
 export type SettingsHandlers = {
@@ -53,10 +53,9 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
         <code>r-base.project.json</code>
         (Lox-Prefix Standardschema: <code id="schema-prefix-hint"></code>).
       </p>
-      <label class="settings-row">
-        <span>Aktives Schema in der Tabelle</span>
-        <select class="field" data-list-schema></select>
-      </label>
+      <p class="muted settings-intro">
+        Aktives Schema (Tabelle, neue Datensätze): Auswahl in der Kopfzeile neben „Stamm:“.
+      </p>
       <div class="settings-btn-row">
         <button type="button" class="btn" data-action="system-config">Schemata verwalten…</button>
       </div>
@@ -106,18 +105,6 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
   const prefixHint = dialog.querySelector<HTMLElement>("#schema-prefix-hint");
   if (prefixHint) prefixHint.textContent = `${getLoxIdPrefix()}-XXXX-XXXX`;
 
-  const listSchemaSelect = dialog.querySelector<HTMLSelectElement>("[data-list-schema]")!;
-  const activeListId = appState.listViewSchemaId ?? getDefaultSchemaId();
-  const cfg = loadSystemSchemaConfig();
-  for (const schema of cfg.schemas) {
-    const opt = document.createElement("option");
-    opt.value = schema.id;
-    opt.textContent = schema.name;
-    if (schema.id === activeListId) opt.selected = true;
-    listSchemaSelect.append(opt);
-  }
-  listSchemaSelect.disabled = !appState.ready;
-
   const datasetRow = dialog.querySelector<HTMLElement>("[data-dataset-row]")!;
   const datasetHint = dialog.querySelector<HTMLElement>("[data-dataset-hint]")!;
   if (selectedScan && appState.ready) {
@@ -141,7 +128,7 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
     handlers.onClose();
   };
 
-  const schemaIdFromListSelect = () => listSchemaSelect.value || getDefaultSchemaId();
+  const schemaIdFromListSelect = () => activeListSchemaId(appState.listViewSchemaId);
 
   const openEditor = (initialTab: "liste" | "excel" | "detail" | "export", withDataset: boolean) => {
     const schemaId = withDataset && selectedScan
@@ -167,13 +154,6 @@ export function openSettingsModal(handlers: SettingsHandlers): void {
 
   const showObsoleteCb = dialog.querySelector<HTMLInputElement>("[data-show-obsolete]")!;
   showObsoleteCb.checked = getProjectUiSettings().showObsoleteFieldsInDetail;
-
-  listSchemaSelect.addEventListener("change", () => {
-    const id = listSchemaSelect.value.trim();
-    patchState({ listViewSchemaId: id === getDefaultSchemaId() ? null : id });
-    handlers.onRerender();
-    status.textContent = "Tabellen-Schema übernommen.";
-  });
 
   dialog.querySelector('[data-action="system-config"]')?.addEventListener("click", () => {
     backdrop.remove();

@@ -173,6 +173,11 @@ export function getDefaultSchemaId(): string {
   return loadSystemSchemaConfig().defaultSchemaId;
 }
 
+/** Aktives Listen-/Arbeits-Schema (null = Standardschema). */
+export function activeListSchemaId(listViewSchemaId: string | null): string {
+  return listViewSchemaId ?? getDefaultSchemaId();
+}
+
 export function getSchemaById(id: string): DatasetSchemaDefinition | undefined {
   return loadSystemSchemaConfig().schemas.find((s) => s.id === id);
 }
