@@ -13,9 +13,7 @@ export function scansForSchemaExport(
   scans: DatasetScan[],
   schema: DatasetSchemaDefinition,
 ): DatasetScan[] {
-  return scans
-    .filter((s) => resolveSchemaForDataset(s.meta).id === schema.id)
-    .sort((a, b) => a.meta.locId.localeCompare(b.meta.locId, "de", { numeric: true }));
+  return scans.filter((s) => resolveSchemaForDataset(s.meta).id === schema.id);
 }
 
 export function isEmptyExportValue(text: string): boolean {

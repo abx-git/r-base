@@ -41,15 +41,16 @@ import { normalizeDatasetTags } from "./lib/dataset-tags";
 import type { DatasetSchemaDefinition } from "./lib/dataset-schema-types";
 import {
   activeListSchemaId,
+  clearActiveSchemaConfig,
   installSystemSchemaConfig,
-  loadSystemSchemaConfig,
   resolveSchemaForDataset,
 } from "./lib/dataset-schema-store";
+import { createEmptyProjectSchemaConfig } from "./lib/project-schema-bootstrap";
 import { setSchemaFieldHidden } from "./lib/meta-hidden-fields";
 import { pickSchemaIdForImport } from "./lib/schema-import-ui";
 import { openSchemaHtmlExportModal } from "./ui/schema-html-export-modal";
 import { openSchemaPdfExportModal } from "./ui/schema-export-modal";
-import { buildRecordFilter, filterScansByRecordFilter } from "./lib/record-filter";
+import { prepareExportScans } from "./lib/export-scans";
 import {
   bindProjectRoot,
   getProjectUiSettings,
@@ -60,13 +61,15 @@ import {
 } from "./lib/project-config";
 import { getWebDavSettings, setWebDavSettings } from "./lib/credentials";
 
-async function applyProjectConfigFromRoot(root: FileSystemDirectoryHandle): Promise<void> {
+async function applyProjectConfigFromRoot(root: FileSystemDirectoryHandle): Promise<boolean> {
   bindProjectRoot(root);
   let file = await readProjectConfigFromRoot(root);
+  let created = false;
   if (!file) {
+    created = true;
     const bootstrap: ProjectConfigFile = {
       configVersion: 1,
-      schemas: loadSystemSchemaConfig(),
+      schemas: createEmptyProjectSchemaConfig(),
       settings: { webdav: getWebDavSettings(), ui: getProjectUiSettings() },
     };
     await writeProjectConfigToRoot(root, bootstrap);
@@ -75,11 +78,12 @@ async function applyProjectConfigFromRoot(root: FileSystemDirectoryHandle): Prom
   installSystemSchemaConfig(file.schemas);
   setWebDavSettings(file.settings?.webdav ?? { baseUrl: "", username: "" });
   setProjectUiSettings(file.settings?.ui ?? {});
+  return created;
 }
 
-async function reloadFromDisk(): Promise<void> {
-  if (!appState.rootHandle) return;
-  await applyProjectConfigFromRoot(appState.rootHandle);
+async function reloadFromDisk(): Promise<boolean> {
+  if (!appState.rootHandle) return false;
+  const createdProject = await applyProjectConfigFromRoot(appState.rootHandle);
   const scans = await scanAllDatasets(appState.rootHandle);
   const records = scans.map((s) => recordFromScan(s, syncStatusAfterLocalEdit()));
   await rebuildIndex(records);
@@ -87,6 +91,7 @@ async function reloadFromDisk(): Promise<void> {
   globalSync.pendingCount = pendingLocalChanges(scans);
   await saveGlobalSync(globalSync);
   patchState({ scans, records, globalSync, ready: true });
+  return createdProject;
 }
 
 async function connectFolder(): Promise<void> {
@@ -101,10 +106,25 @@ async function connectFolder(): Promise<void> {
     patchState({ error: "Keine Schreibberechtigung für den Ordner." });
     return;
   }
+  clearActiveSchemaConfig();
   await persistRootHandle(handle);
   patchState({ rootHandle: handle, rootLabel: handle.name });
-  await reloadFromDisk();
-  patchState({ listViewSchemaId: null, message: "Stammordner verbunden." });
+  try {
+    const createdProject = await reloadFromDisk();
+    patchState({
+      listViewSchemaId: null,
+      message: createdProject
+        ? "Stammordner verbunden. Projekt mit „Leeres Basisschema“ angelegt."
+        : "Stammordner verbunden.",
+    });
+  } catch (e) {
+    patchState({
+      rootHandle: null,
+      rootLabel: "",
+      ready: false,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
 }
 
 async function refreshIndexAfterMetaWrite(scan: DatasetScan): Promise<void> {
@@ -221,27 +241,13 @@ export function startApp(container: HTMLElement): void {
     },
     onExcelExport: () => {
       if (!appState.ready) return;
-      const filter = buildRecordFilter({
-        query: appState.filterQuery,
-        tagRules: appState.filterTagRules,
-        columnFilters: appState.tableColumnFilters,
-        listSchemaId: activeListSchemaId(appState.listViewSchemaId),
-      });
-      const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
-      openSchemaExcelExportModal(scans, appState.records, filter, (msg, isError) => {
+      openSchemaExcelExportModal(prepareExportScans(appState), appState.records, (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
       });
     },
     onSchemaPdfExport: () => {
       if (!appState.ready) return;
-      const filter = buildRecordFilter({
-        query: appState.filterQuery,
-        tagRules: appState.filterTagRules,
-        columnFilters: appState.tableColumnFilters,
-        listSchemaId: activeListSchemaId(appState.listViewSchemaId),
-      });
-      const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
-      openSchemaPdfExportModal(scans, filter, (msg, isError) => {
+      openSchemaPdfExportModal(prepareExportScans(appState), (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
       });
     },
@@ -250,14 +256,7 @@ export function startApp(container: HTMLElement): void {
         patchState({ error: "Zuerst Stammordner mit Schreibzugriff wählen.", message: "" });
         return;
       }
-      const filter = buildRecordFilter({
-        query: appState.filterQuery,
-        tagRules: appState.filterTagRules,
-        columnFilters: appState.tableColumnFilters,
-        listSchemaId: activeListSchemaId(appState.listViewSchemaId),
-      });
-      const scans = filterScansByRecordFilter(appState.scans, appState.records, filter);
-      openSchemaHtmlExportModal(appState.rootHandle, scans, filter, (msg, isError) => {
+      openSchemaHtmlExportModal(appState.rootHandle, prepareExportScans(appState), (msg, isError) => {
         patchState(isError ? { error: msg, message: "" } : { message: msg, error: "" });
       });
     },

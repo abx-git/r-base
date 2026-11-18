@@ -1,15 +1,13 @@
-import type { DatasetScan } from "../lib/fs-local";
-import type { RecordFilterState } from "../lib/record-filter";
-import { hasActiveRecordFilter } from "../lib/record-filter";
+import { describeExportScope, type PreparedExport } from "../lib/export-scans";
 import { getSchemaById, loadSystemSchemaConfig, resolveSchemaForDataset } from "../lib/dataset-schema-store";
 import { writeSchemaHtmlExportToRoot } from "../lib/schema-html-export";
 
 export function openSchemaHtmlExportModal(
   root: FileSystemDirectoryHandle,
-  scans: DatasetScan[],
-  filter: RecordFilterState,
+  prepared: PreparedExport,
   onStatus: (msg: string, isError?: boolean) => void,
 ): void {
+  const { scans, filter, sort, selectionOnly } = prepared;
   const cfg = loadSystemSchemaConfig();
   if (!cfg.schemas.length) {
     onStatus("Kein Schema konfiguriert.", true);
@@ -28,10 +26,8 @@ export function openSchemaHtmlExportModal(
 
   const intro = document.createElement("p");
   intro.className = "muted";
-  const filterActive = hasActiveRecordFilter(filter);
-  intro.textContent = filterActive
-    ? "Es wird ein Ordner im Stammverzeichnis angelegt (nur gefilterte Datensätze). Layout und Bilder laut „Exportformular“."
-    : "Es wird ein Ordner unter _exports/html/ im Stammordner erzeugt — Startseite plus eine Unterseite pro Datensatz.";
+  intro.textContent =
+    "Unterordner im Stamm — Datensätze und Reihenfolge wie in der Tabelle. Layout/Bilder laut „Exportformular“.";
 
   const schemaLabel = document.createElement("label");
   schemaLabel.className = "schema-export-row";
@@ -44,21 +40,14 @@ export function openSchemaHtmlExportModal(
     opt.value = s.id;
     const count = scans.filter((sc) => resolveSchemaForDataset(sc.meta).id === s.id).length;
     opt.textContent = `${s.name} (${count} Datensätze)`;
-    if (s.id === cfg.defaultSchemaId) opt.selected = true;
+    if (filter.listSchemaId ? s.id === filter.listSchemaId : s.id === cfg.defaultSchemaId) opt.selected = true;
     schemaSelect.append(opt);
   }
   schemaLabel.append(schemaSpan, schemaSelect);
 
-  let filterNote: HTMLElement | null = null;
-  if (filterActive) {
-    filterNote = document.createElement("p");
-    filterNote.className = "muted schema-export-filter-note";
-    const q = filter.query.trim();
-    const parts: string[] = [];
-    if (q) parts.push(`Suche: „${q}"`);
-    if (filter.tagRules.length) parts.push(`${filter.tagRules.length} Tag-Regel(n)`);
-    filterNote.textContent = `Filter aktiv (${parts.join(" · ")}). Es werden ${scans.length} Datensätze berücksichtigt.`;
-  }
+  const filterNote = document.createElement("p");
+  filterNote.className = "muted schema-export-filter-note";
+  filterNote.textContent = describeExportScope(filter, scans.length, sort, selectionOnly);
 
   const optEmpty = document.createElement("label");
   optEmpty.className = "schema-export-check";
@@ -121,7 +110,7 @@ export function openSchemaHtmlExportModal(
 
   actions.append(cancelBtn, exportBtn);
   dialog.append(title, intro, schemaLabel);
-  if (filterNote) dialog.append(filterNote);
+  dialog.append(filterNote);
   dialog.append(optEmpty, optCover, actions);
   backdrop.append(dialog);
   document.body.append(backdrop);

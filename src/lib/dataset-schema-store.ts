@@ -1,9 +1,5 @@
 import type { DatasetSchemaDefinition, SystemSchemaConfig } from "./dataset-schema-types";
-import {
-  BUILTIN_SCHEMA_ID,
-  DEFAULT_RUD_SCHEMA,
-  createDefaultSystemSchemaConfig,
-} from "./dataset-schema-defaults";
+import { BUILTIN_SCHEMA_ID, createDefaultSystemSchemaConfig } from "./dataset-schema-defaults";
 import { absorbLegacyJuraContainer } from "./jura-csv-schema";
 import { repairSchemaDefinition, repairSystemSchemaConfig } from "./schema-compat";
 import { getBoundProjectRoot, persistCurrentProjectConfig } from "./project-config";
@@ -21,7 +17,7 @@ function loadConfigFromLocalStorage(): SystemSchemaConfig {
     if (parsed?.configVersion !== 1 || !Array.isArray(parsed.schemas) || !parsed.schemas.length) {
       return createDefaultSystemSchemaConfig();
     }
-    return mergeWithBuiltin(parsed);
+    return parsed;
   } catch {
     return createDefaultSystemSchemaConfig();
   }
@@ -34,8 +30,7 @@ export function loadSystemSchemaConfig(): SystemSchemaConfig {
 
 /** Beim Öffnen des Stammordners: Projektdatei → aktive Schema-Konfiguration. */
 export function installSystemSchemaConfig(config: SystemSchemaConfig): SystemSchemaConfig {
-  const merged = mergeWithBuiltin(config);
-  const repaired = repairSystemSchemaConfig(merged);
+  const repaired = repairSystemSchemaConfig(config);
   const normalized = normalizeConfig(repaired);
   activeConfig = normalized;
   try {
@@ -50,15 +45,6 @@ export function installSystemSchemaConfig(config: SystemSchemaConfig): SystemSch
 
 export function clearActiveSchemaConfig(): void {
   activeConfig = null;
-}
-
-function mergeWithBuiltin(config: SystemSchemaConfig): SystemSchemaConfig {
-  const hasBuiltin = config.schemas.some((s) => s.id === BUILTIN_SCHEMA_ID);
-  if (hasBuiltin) return normalizeConfig(config);
-  return normalizeConfig({
-    ...config,
-    schemas: [structuredClone(DEFAULT_RUD_SCHEMA), ...config.schemas],
-  });
 }
 
 function normalizeConfig(config: SystemSchemaConfig): SystemSchemaConfig {
@@ -213,7 +199,6 @@ export function upsertSchemaDefinition(schema: DatasetSchemaDefinition): void {
 }
 
 export function removeSchemaDefinition(id: string): boolean {
-  if (id === BUILTIN_SCHEMA_ID) return false;
   const cfg = loadSystemSchemaConfig();
   if (cfg.schemas.length <= 1) return false;
   cfg.schemas = cfg.schemas.filter((s) => s.id !== id);

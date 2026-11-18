@@ -1,4 +1,5 @@
 import type { DatasetSchemaDefinition } from "./dataset-schema-types";
+import { createMinimalDatasetSchema } from "./dataset-schema-defaults";
 import { mergeFieldsIntoSchema } from "./schema-dynamic";
 
 /** Spalten der Rudisten-Datenbank Jura (CSV Zeile 2). */
@@ -77,6 +78,21 @@ export function mergeJuraImportIntoSchema(schema: DatasetSchemaDefinition): Data
     layoutFieldKeys: JURA_CSV_COLUMN_KEYS,
     hideNewDetailKeys: true,
     hideNewTableColumns: true,
+    labelsForTable: JURA_LABELS,
+  });
+}
+
+/** Vollständiges Startschema für Rudisten-Jura-Projekte (ohne RUD-Werksvorgabe). */
+export function createJuraDatasetSchema(): DatasetSchemaDefinition {
+  const base = createMinimalDatasetSchema({
+    id: "jura-v1",
+    name: "Rudisten Jura",
+    loxPrefix: "JUR",
+  });
+  return mergeFieldsIntoSchema(base, JURA_CSV_FIELD_DEFS, {
+    layoutFieldKeys: [...JURA_CSV_COLUMN_KEYS],
+    hideNewDetailKeys: false,
+    hideNewTableColumns: false,
     labelsForTable: JURA_LABELS,
   });
 }

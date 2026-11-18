@@ -71,3 +71,70 @@ export function createDefaultSystemSchemaConfig(): SystemSchemaConfig {
     schemas: [structuredClone(DEFAULT_RUD_SCHEMA)],
   };
 }
+
+/** Schlanke Vorlage ohne Builtin-Flag (neue Schemata / neues Projekt). */
+export function createMinimalDatasetSchema(
+  overrides?: Partial<Pick<DatasetSchemaDefinition, "id" | "name" | "loxPrefix">>,
+): DatasetSchemaDefinition {
+  const id = overrides?.id ?? `schema-${Date.now()}`;
+  const loxPrefix = (overrides?.loxPrefix ?? "LOC").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "LOC";
+  return {
+    id,
+    name: overrides?.name ?? "Basis",
+    loxPrefix,
+    metaVersion: 1,
+    fields: [
+      { key: "locId", label: "ID", dataType: "locId", system: true },
+      { key: "bezeichnung", label: "Bezeichnung", dataType: "string", system: true, constraints: { required: true } },
+      { key: "kategorie", label: "Kategorie", dataType: "string" },
+      { key: "notes", label: "Notizen", dataType: "text" },
+      { key: "tags", label: "Tags", dataType: "tags" },
+    ],
+    layout: [
+      {
+        id: "row-main",
+        containers: [
+          {
+            id: "container-meta",
+            title: "",
+            colSpan: 6,
+            fieldKeys: ["locId", "bezeichnung", "kategorie", "notes", "tags"],
+          },
+          {
+            id: FILES_LAYOUT_CONTAINER_ID,
+            title: "Dateien",
+            colSpan: 6,
+            fieldKeys: [],
+          },
+        ],
+      },
+    ],
+    exportLayout: [
+      {
+        id: "row-export",
+        containers: [
+          {
+            id: "container-meta",
+            title: "",
+            colSpan: 6,
+            fieldKeys: ["locId", "bezeichnung", "kategorie", "notes", "tags"],
+          },
+          {
+            id: FILES_LAYOUT_CONTAINER_ID,
+            title: "Bilder",
+            colSpan: 6,
+            fieldKeys: [],
+          },
+        ],
+      },
+    ],
+    tableColumns: [
+      { fieldKey: "locId", label: "ID", source: "meta", width: "10rem" },
+      { fieldKey: "bezeichnung", label: "Bezeichnung", source: "meta" },
+      { fieldKey: "kategorie", label: "Kategorie", source: "meta", width: "7rem" },
+      { fieldKey: "tags", label: "Tags", source: "meta", width: "9rem" },
+      { fieldKey: "fileCount", label: "Dateien", source: "index", width: "4.5rem" },
+      { fieldKey: "syncStatus", label: "Sync", source: "index", width: "7rem" },
+    ],
+  };
+}

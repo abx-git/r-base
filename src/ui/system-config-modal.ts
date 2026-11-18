@@ -7,7 +7,7 @@ import {
   upsertSchemaDefinition,
 } from "../lib/dataset-schema-store";
 import type { DatasetSchemaDefinition } from "../lib/dataset-schema-types";
-import { DEFAULT_RUD_SCHEMA } from "../lib/dataset-schema-defaults";
+import { createMinimalDatasetSchema } from "../lib/dataset-schema-defaults";
 import { openSchemaEditorModal } from "./schema-editor-modal";
 
 export function openSystemConfigModal(onChanged: () => void): void {
@@ -73,7 +73,7 @@ export function openSystemConfigModal(onChanged: () => void): void {
       delBtn.type = "button";
       delBtn.className = "btn";
       delBtn.textContent = "Löschen";
-      delBtn.disabled = Boolean(schema.builtin) || cfg.schemas.length <= 1;
+      delBtn.disabled = cfg.schemas.length <= 1;
       delBtn.addEventListener("click", () => {
         if (!window.confirm(`Schema „${schema.name}“ wirklich entfernen?`)) return;
         removeSchemaDefinition(schema.id);
@@ -142,10 +142,7 @@ function createNewSchema(): DatasetSchemaDefinition {
   while (cfg.schemas.some((s) => s.id === id)) {
     id = `schema-${Date.now()}-${n++}`;
   }
-  const copy = structuredClone(DEFAULT_RUD_SCHEMA);
-  copy.id = id;
-  copy.name = "Neues Schema";
-  delete copy.builtin;
+  const copy = createMinimalDatasetSchema({ id, name: "Neues Schema", loxPrefix: "LOC" });
   upsertSchemaDefinition(copy);
   return copy;
 }

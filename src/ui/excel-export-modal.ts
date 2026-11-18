@@ -1,16 +1,14 @@
 import type { IndexRecord } from "../lib/db-index";
-import type { DatasetScan } from "../lib/fs-local";
-import type { RecordFilterState } from "../lib/record-filter";
-import { hasActiveRecordFilter } from "../lib/record-filter";
+import { describeExportScope, type PreparedExport } from "../lib/export-scans";
 import { getSchemaById, loadSystemSchemaConfig, resolveSchemaForDataset } from "../lib/dataset-schema-store";
 import { downloadBlob, exportSchemaMetadataXlsx, excelExportFilename } from "../lib/excel-io";
 
 export function openSchemaExcelExportModal(
-  scans: DatasetScan[],
+  prepared: PreparedExport,
   records: IndexRecord[],
-  filter: RecordFilterState,
   onStatus: (msg: string, isError?: boolean) => void,
 ): void {
+  const { scans, filter, sort, selectionOnly } = prepared;
   const cfg = loadSystemSchemaConfig();
   if (!cfg.schemas.length) {
     onStatus("Kein Schema konfiguriert.", true);
@@ -29,10 +27,8 @@ export function openSchemaExcelExportModal(
 
   const intro = document.createElement("p");
   intro.className = "muted";
-  const filterActive = hasActiveRecordFilter(filter);
-  intro.textContent = filterActive
-    ? "Export nur für die aktuell gefilterte Liste (Suchfeld und Tag-Filter in der Seitenleiste)."
-    : "Export für alle Datensätze des gewählten Schemas (Spalten laut Tab „Excel-Export“ im Schema-Editor).";
+  intro.textContent =
+    "Zeilen und Reihenfolge wie in der Tabelle (aktives Schema, Suche, Tags, Spaltenfilter, Sortierung; mit gesetzter Zeilen-Auswahl nur diese).";
 
   const schemaLabel = document.createElement("label");
   schemaLabel.className = "schema-export-row";
@@ -45,21 +41,14 @@ export function openSchemaExcelExportModal(
     opt.value = s.id;
     const count = scans.filter((sc) => resolveSchemaForDataset(sc.meta).id === s.id).length;
     opt.textContent = `${s.name} (${count} Datensätze)`;
-    if (s.id === cfg.defaultSchemaId) opt.selected = true;
+    if (filter.listSchemaId ? s.id === filter.listSchemaId : s.id === cfg.defaultSchemaId) opt.selected = true;
     schemaSelect.append(opt);
   }
   schemaLabel.append(schemaSpan, schemaSelect);
 
-  let filterNote: HTMLElement | null = null;
-  if (filterActive) {
-    filterNote = document.createElement("p");
-    filterNote.className = "muted schema-export-filter-note";
-    const q = filter.query.trim();
-    const parts: string[] = [];
-    if (q) parts.push(`Suche: „${q}"`);
-    if (filter.tagRules.length) parts.push(`${filter.tagRules.length} Tag-Regel(n)`);
-    filterNote.textContent = `Filter aktiv (${parts.join(" · ")}). Es werden ${scans.length} Datensätze berücksichtigt.`;
-  }
+  const filterNote = document.createElement("p");
+  filterNote.className = "muted schema-export-filter-note";
+  filterNote.textContent = describeExportScope(filter, scans.length, sort, selectionOnly);
 
   const actions = document.createElement("div");
   actions.className = "modal-actions";
@@ -107,8 +96,7 @@ export function openSchemaExcelExportModal(
     }
   });
 
-  dialog.append(title, intro, schemaLabel);
-  if (filterNote) dialog.append(filterNote);
+  dialog.append(title, intro, schemaLabel, filterNote);
   dialog.append(actions);
   actions.append(cancelBtn, exportBtn);
   backdrop.append(dialog);
